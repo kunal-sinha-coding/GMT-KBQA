@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import GradScaler
-from transformers import AutoTokenizer, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoModelForCausalLM, AutoTokenizer, AdamW, get_linear_schedule_with_warmup
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
 import copy
@@ -125,22 +125,75 @@ class CustomDataset(Dataset):
         
         return question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id[0]
 
-def calculate_perplexity(model, train_batch, tokenizer):
-    question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id = train_batch  
-    bsz, _ = question_token_ids.shape
+def calculate_perplexity(llm_model, llm_tokenizer, train_batch, device):
+    question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id = train_batch
+
+    # Format questions
+    bsz, num_rels, _ = relations_token_ids.shape
+    question_repeat_token_ids = question_token_ids[:, None, :].repeat((1, num_rels, 1))
+    question_repeat_attn_masks = question_attn_masks[:, None, :].repeat((1, num_rels, 1))
+
+    # Get answers
     answer = ["Dog" for _ in range(bsz)]
-    encoded_answer = tokenizer(
-        answer, padding="max_length", truncation=True, return_tensors="pt"
-    ).to(device)
-    answer_token_ids = encoded_answer.input_ids.squeeze(0)
-    answer_attn_masks = encoded_answer.attention_mask.squeeze(0)
-    answer_token_type_ids = encoded_answer.token_type_ids.squeeze(0)
-    input_token_ids = torch.concat([question_token_ids, relation_token_ids, answer_token_ids], axis=-1)
-    input_attn_masks = torch.concat([question_attn_masks, relation_attn_masks, answer_attn_masks], axis=-1)
-    input_token_type_ids = torch.concat([question_token_type_ids, relation_token_type_ids, answer_token_type_ids], axis=-1)
+    encoded_answer = tokenizer(answer, padding=True, truncation=True, return_tensors="pt")
+    answer_token_ids = encoded_answer.input_ids
+    answer_attn_masks = encoded_answer.attention_mask
+    
+    # Format answers
+    answer_repeat_token_ids = answer_token_ids[:, None, :].repeat((1, num_rels, 1))
+    answer_repeat_attn_masks = answer_attn_masks[:, None, :].repeat((1, num_rels, 1))
+
+    # Form full sequences
+    seq_token_ids = torch.cat([
+        question_repeat_token_ids, relations_token_ids, answer_repeat_token_ids
+    ], dim=-1)
+    seq_attn_masks = torch.cat([
+        question_repeat_attn_masks, relations_attn_masks, answer_repeat_attn_masks
+    ], dim=-1)
+    bsz, num_seqs, seq_length = seq_token_ids.shape
+
+    # Get indices to move padding to end of sequence
+    batch_indices = torch.arange(bsz)[:, None, None].repeat((1, num_seqs, seq_length))
+    seq_indices = torch.arange(num_seqs)[None, :, None].repeat((bsz, 1, seq_length))
+    pad_mask = (seq_token_ids == llm_tokenizer.pad_token_id)
+    # Sort mask to move all 1s (pad) to end and 0s (nonpad) to start
+    # Convert to numpy to preserve order within each category (0 vs 1)
+    sorted_indices = torch.tensor(pad_mask.numpy().argsort(axis=-1, kind="stable"))
+
+    # Move padding to end of sequence
+    full_token_ids = seq_token_ids[batch_indices, seq_indices, sorted_indices].to(device)
+    full_attn_masks = seq_attn_masks[batch_indices, seq_indices, sorted_indices].to(device)
+
+    # Get mask for tokens which are part of an answer
+    answer_len = answer_token_ids.size(-1)
+    is_answer_mask = torch.cat([
+        torch.zeros((bsz, num_seqs, seq_length - answer_len)),
+        torch.ones((bsz, num_seqs, answer_len))
+    ], dim=-1) * seq_attn_masks
+    full_is_answer_mask = is_answer_mask[batch_indices, seq_indices, sorted_indices].to(device)
+
+    import pdb; pdb.set_trace() #TODO: use the LLM not the bi-encoder model
+    # Calculate logits and get CE loss
+    full_logits = llm_model(
+        input_ids=full_token_ids, # Don't predict for last token
+        labels=full_token_ids,
+        attention_mask=full_attn_masks
+    ).logits
+
+    # Shift is_answer mask because logits cut first token
+    is_answer_mask = is_answer_mask[:, :, 1:]
+
+    # Compute cross entropy loss
+    ce_loss = F.cross_entropy(
+        full_logits.flatten(0, 1),
+        full_attn_masks.flatten(0, 1),
+        ignore_index=llm_tokenizer.pad_token_id,
+        reduction="none"
+    )
+    import pdb; pdb.set_trace()
 
 
-def train_bert(model, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type, tokenizer):
+def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type):
     nb_iterations = len(train_loader)
     print_every = nb_iterations // 5
     if log_path:
@@ -164,7 +217,7 @@ def train_bert(model, opti, lr, lr_scheduler, train_loader, val_loader, epochs, 
                 relations_token_type_ids.to(device),
                 golden_id.to(device)
             )
-            perplexity = calculate_perplexity(model, train_batch, tokenizer)
+            perplexity = calculate_perplexity(llm_model, llm_tokenizer, train_batch, device)
             loss = loss / iters_to_accumulate
             scaler.scale(loss).backward()
         
@@ -253,7 +306,23 @@ def main(args):
     t_total = (len(train_loader) // iters_to_accumulate) * epochs  # Necessary to take into account Gradient accumulation
     lr_scheduler = get_linear_schedule_with_warmup(optimizer=opti, num_warmup_steps=num_warmup_steps, num_training_steps=t_total)
     
-    train_bert(model, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.model_save_path, args.dataset_type)
+    # New code for loading in LLM
+    llm_name = "meta-llama/Llama-2-7b-hf"
+    llm_token = os.getenv("HF_AUTH_TOKEN")
+    print(f"Loading in LLM and tokenizer: {llm_name}...")
+    llm_model = AutoModelForCausalLM.from_pretrained(
+        llm_name,
+        use_auth_token=llm_token
+    ).to(self.device)
+    print("LLM model succesfully loaded")
+    llm_tokenizer = AutoTokenizer.from_pretrained(
+        llm_name, use_fast=False,
+        use_auth_token=llm_token
+    )
+    print("LLM tokenizer successfully loaded")
+    
+
+    train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.model_save_path, args.dataset_type)
          
 
 if __name__=='__main__':
