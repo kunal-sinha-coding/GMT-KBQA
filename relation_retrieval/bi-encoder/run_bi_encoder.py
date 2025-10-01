@@ -64,7 +64,7 @@ def evaluate(model, device, dataloader):
     preds = []
     
     with torch.no_grad():
-        for question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id in tqdm(dataloader):
+        for question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id in tqdm(dataloader):
             scores, loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
@@ -128,23 +128,29 @@ class CustomDataset(Dataset):
         relations_attn_masks = torch.cat([encoded_relation['attention_mask'] for encoded_relation in encoded_relations], 0)
         relations_token_type_ids = torch.cat([encoded_relation['token_type_ids'] for encoded_relation in encoded_relations], 0)
         
-        return question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id[0]
+        return question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id[0]
 
-def calculate_perplexity(llm_model, llm_tokenizer, train_batch, device):
-    question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id = train_batch
+def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device):
 
-    # Format questions
-    bsz, num_rels, _ = relations_token_ids.shape
-    question_repeat_token_ids = question_token_ids[:, None, :].repeat((1, num_rels, 1))
-    question_repeat_attn_masks = question_attn_masks[:, None, :].repeat((1, num_rels, 1))
+    # Get questions, relations, and answers encoded by the llm tokenizer
+    encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt")
+    question_token_ids = encoded_question.input_ids
+    question_attn_masks = encoded_question.attention_mask
 
-    # Get answers
+    encoded_relations = llm_tokenizer(relations, padding=True, truncation=True, return_tensors="pt")
+    relations_token_ids = encoded_relations.input_ids
+    relations_attn_masks = encoded_relations.attention_mask
+    bsz, num_rels = relations_token_ids.shape
+    
     answer = ["Dog" for _ in range(bsz)]
     encoded_answer = llm_tokenizer(answer, padding=True, truncation=True, return_tensors="pt")
     answer_token_ids = encoded_answer.input_ids
     answer_attn_masks = encoded_answer.attention_mask
     
-    # Format answers
+    # Format question and answer tensors
+    question_repeat_token_ids = question_token_ids[:, None, :].repeat((1, num_rels, 1))
+    question_repeat_attn_masks = question_attn_masks[:, None, :].repeat((1, num_rels, 1))
+
     answer_repeat_token_ids = answer_token_ids[:, None, :].repeat((1, num_rels, 1))
     answer_repeat_attn_masks = answer_attn_masks[:, None, :].repeat((1, num_rels, 1))
 
@@ -177,12 +183,12 @@ def calculate_perplexity(llm_model, llm_tokenizer, train_batch, device):
     ], dim=-1) * seq_attn_masks
     is_answer_mask = is_answer_mask[batch_indices, seq_indices, sorted_indices].bool()
 
-    #TODO: tokenize the questions and relations with the llm_tokenizer; possibly quantize to 8bit
+    #TODO: possibly quantize to 8bit
 
     # Calculate ce_loss in batches
     ppl_bsz = 10
     full_ce_loss = []
-    for ppl_idx in range(num_rels // ppl_bsz):
+    for ppl_idx in range(num_seqs // ppl_bsz):
 
         # Get batch
         start, end = ppl_idx * ppl_bsz, (ppl_idx + 1) * ppl_bsz
@@ -238,7 +244,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
         running_loss = 0.0
         
         for it, train_batch in enumerate(tqdm(train_loader)):
-            question_token_ids, question_attn_masks, question_token_type_ids, relations_token_ids, relations_attn_masks, relations_token_type_ids, golden_id = train_batch           
+            question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id = train_batch           
             scores, loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
@@ -249,7 +255,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
                 golden_id.to(device)
             )
             with torch.no_grad(), torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-                perplexity = calculate_perplexity(llm_model, llm_tokenizer, train_batch, device)
+                perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device)
             loss = loss / iters_to_accumulate
             scaler.scale(loss).backward()
         
