@@ -5,14 +5,19 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import GradScaler
-from transformers import AutoModelForCausalLM, AutoTokenizer, AdamW, get_linear_schedule_with_warmup
+from torch.optim import AdamW
+import torch.nn.functional as F
+from transformers import AutoModelForCausalLM, AutoTokenizer, get_linear_schedule_with_warmup
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
 import copy
 import argparse
+from dotenv import load_dotenv
 
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
+LLM_PAD_TOKEN = '[PAD]'
+load_dotenv()
 
 
 def _parse_args():
@@ -135,7 +140,7 @@ def calculate_perplexity(llm_model, llm_tokenizer, train_batch, device):
 
     # Get answers
     answer = ["Dog" for _ in range(bsz)]
-    encoded_answer = tokenizer(answer, padding=True, truncation=True, return_tensors="pt")
+    encoded_answer = llm_tokenizer(answer, padding=True, truncation=True, return_tensors="pt")
     answer_token_ids = encoded_answer.input_ids
     answer_attn_masks = encoded_answer.attention_mask
     
@@ -161,8 +166,8 @@ def calculate_perplexity(llm_model, llm_tokenizer, train_batch, device):
     sorted_indices = torch.tensor(pad_mask.numpy().argsort(axis=-1, kind="stable"))
 
     # Move padding to end of sequence
-    full_token_ids = seq_token_ids[batch_indices, seq_indices, sorted_indices].to(device)
-    full_attn_masks = seq_attn_masks[batch_indices, seq_indices, sorted_indices].to(device)
+    full_token_ids = seq_token_ids[batch_indices, seq_indices, sorted_indices]
+    full_attn_masks = seq_attn_masks[batch_indices, seq_indices, sorted_indices]
 
     # Get mask for tokens which are part of an answer
     answer_len = answer_token_ids.size(-1)
@@ -170,27 +175,53 @@ def calculate_perplexity(llm_model, llm_tokenizer, train_batch, device):
         torch.zeros((bsz, num_seqs, seq_length - answer_len)),
         torch.ones((bsz, num_seqs, answer_len))
     ], dim=-1) * seq_attn_masks
-    full_is_answer_mask = is_answer_mask[batch_indices, seq_indices, sorted_indices].to(device)
+    is_answer_mask = is_answer_mask[batch_indices, seq_indices, sorted_indices].bool()
 
-    import pdb; pdb.set_trace() #TODO: use the LLM not the bi-encoder model
-    # Calculate logits and get CE loss
-    full_logits = llm_model(
-        input_ids=full_token_ids, # Don't predict for last token
-        labels=full_token_ids,
-        attention_mask=full_attn_masks
-    ).logits
+    #TODO: tokenize the questions and relations with the llm_tokenizer; possibly quantize to 8bit
 
-    # Shift is_answer mask because logits cut first token
-    is_answer_mask = is_answer_mask[:, :, 1:]
+    # Calculate ce_loss in batches
+    ppl_bsz = 10
+    full_ce_loss = []
+    for ppl_idx in range(num_rels // ppl_bsz):
 
-    # Compute cross entropy loss
-    ce_loss = F.cross_entropy(
-        full_logits.flatten(0, 1),
-        full_attn_masks.flatten(0, 1),
-        ignore_index=llm_tokenizer.pad_token_id,
-        reduction="none"
-    )
+        # Get batch
+        start, end = ppl_idx * ppl_bsz, (ppl_idx + 1) * ppl_bsz
+        current_token_ids = full_token_ids[:, start:end, :]
+        current_attn_masks = full_attn_masks[:, start:end, :]
+    
+        # Flatten batch
+        flat_token_ids = current_token_ids.flatten(0, 1).to(device)
+        flat_attn_masks = current_attn_masks.flatten(0, 1).to(device)
+
+        # Calculate logits
+        flat_logits = llm_model(
+            input_ids=flat_token_ids,
+            labels=flat_token_ids,
+            attention_mask=flat_attn_masks
+        ).logits
+        logits_mem = torch.cuda.memory_allocated()/1024**2 / 1000
+        print(f"Memory after logits computation: {logits_mem}")
+        
+        # Compute cross entropy loss
+        flat_ce_loss = F.cross_entropy(
+            flat_logits.flatten(0, 1),
+            flat_attn_masks.flatten(0, 1),
+            ignore_index=llm_tokenizer.pad_token_id,
+            reduction="none"
+        )
+        ce_mem = torch.cuda.memory_allocated()/1024**2 / 1000
+        print(f"Memory after CE computation: {ce_mem}")
+
+        # Unflatten ce_loss and store it
+        full_ce_loss.append(flat_ce_loss.reshape(current_token_ids.shape))
+
+    # Combine all ce_loss and grab answer tokens
+    ce_loss = torch.cat(full_ce_loss, dim=1)
+    ce_loss[is_answer_mask] = 0
+    avg_ce_loss = ce_loss.sum(dim=-1) / (ce_loss > 0).sum(dim=-1)
+    perplexity = -avg_ce_loss.exp()
     import pdb; pdb.set_trace()
+    return perplexity
 
 
 def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type):
@@ -217,7 +248,8 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
                 relations_token_type_ids.to(device),
                 golden_id.to(device)
             )
-            perplexity = calculate_perplexity(llm_model, llm_tokenizer, train_batch, device)
+            with torch.no_grad(), torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+                perplexity = calculate_perplexity(llm_model, llm_tokenizer, train_batch, device)
             loss = loss / iters_to_accumulate
             scaler.scale(loss).backward()
         
@@ -310,15 +342,21 @@ def main(args):
     llm_name = "meta-llama/Llama-2-7b-hf"
     llm_token = os.getenv("HF_AUTH_TOKEN")
     print(f"Loading in LLM and tokenizer: {llm_name}...")
+    before_mem = torch.cuda.memory_allocated()/1024**2 / 1000
+    print(f"Before loading in LLM: {before_mem:.2f} GB of CUDA memory used")
     llm_model = AutoModelForCausalLM.from_pretrained(
         llm_name,
+        torch_dtype=torch.bfloat16,
         use_auth_token=llm_token
-    ).to(self.device)
-    print("LLM model succesfully loaded")
+    ).to(device)
+    after_mem = torch.cuda.memory_allocated()/1024**2 / 1000
+    print(f"After loading in LLM: {after_mem:.2f} GB of CUDA memory used")
+    print(f"Total LLM CUDA memory usage: {(after_mem - before_mem):.2f} GB")
     llm_tokenizer = AutoTokenizer.from_pretrained(
         llm_name, use_fast=False,
         use_auth_token=llm_token
     )
+    llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
     print("LLM tokenizer successfully loaded")
     
 
