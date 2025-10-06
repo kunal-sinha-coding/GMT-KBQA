@@ -13,6 +13,7 @@ from sklearn.metrics import accuracy_score
 import copy
 import argparse
 from dotenv import load_dotenv
+from itertools import chain
 
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
@@ -130,24 +131,41 @@ class CustomDataset(Dataset):
         
         return question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id[0]
 
-def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device):
+LLAMA_PROMPT_FORMAT = (
+"""
+[INST]
+<<SYS>>You are a helpful assistant that follows user instructions<</SYS>>
+Question: {question}
+Supporting evidence: {relations}
+Answer:
+[/INST]
+"""
+)
+
+def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, maxlen):
+
+    question = ["[INST] <<SYS>>\n<</SYS>>\n\nWhat is the common word for"]
+    relations = [["canine? [/INST]"]]
+    answer = ["\nDog"]
 
     # Get questions, relations, and answers encoded by the llm tokenizer
-    encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt")
+    encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt", add_special_tokens=True) # Include BOS token
     question_token_ids = encoded_question.input_ids
     question_attn_masks = encoded_question.attention_mask
 
-    encoded_relations = llm_tokenizer(relations, padding=True, truncation=True, return_tensors="pt")
-    relations_token_ids = encoded_relations.input_ids
-    relations_attn_masks = encoded_relations.attention_mask
-    bsz, num_rels = relations_token_ids.shape
+    relations = np.array(relations).T # Reshape to be consistent with other tensors
+    bsz, num_rels = relations.shape
+    all_relations = list(chain.from_iterable(relations)) # Flatten
+    encoded_relations = llm_tokenizer(all_relations, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
+    relations_token_ids = encoded_relations.input_ids.reshape((bsz, num_rels, -1)) # Unflatten  #torch.cat([encoded.input_ids[:, None, :] for encoded in encoded_relations], dim=1)
+    relations_attn_masks = encoded_relations.attention_mask.reshape((bsz, num_rels, -1)) #torch.cat([encoded.attention_mask[:, None, :] for encoded in encoded_relations], dim=-1)
     
-    answer = ["Dog" for _ in range(bsz)]
-    encoded_answer = llm_tokenizer(answer, padding=True, truncation=True, return_tensors="pt")
+    #answer = ["user.synedra" for _ in range(bsz)]
+    encoded_answer = llm_tokenizer(answer, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
     answer_token_ids = encoded_answer.input_ids
     answer_attn_masks = encoded_answer.attention_mask
     
-    # Format question and answer tensors
+    # Expand question and answer tensors
     question_repeat_token_ids = question_token_ids[:, None, :].repeat((1, num_rels, 1))
     question_repeat_attn_masks = question_attn_masks[:, None, :].repeat((1, num_rels, 1))
 
@@ -166,7 +184,9 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device):
     # Get indices to move padding to end of sequence
     batch_indices = torch.arange(bsz)[:, None, None].repeat((1, num_seqs, seq_length))
     seq_indices = torch.arange(num_seqs)[None, :, None].repeat((bsz, 1, seq_length))
-    pad_mask = (seq_token_ids == llm_tokenizer.pad_token_id)
+    pad_mask = (
+        (seq_token_ids == llm_tokenizer.pad_token_id)
+    )
     # Sort mask to move all 1s (pad) to end and 0s (nonpad) to start
     # Convert to numpy to preserve order within each category (0 vs 1)
     sorted_indices = torch.tensor(pad_mask.numpy().argsort(axis=-1, kind="stable"))
@@ -183,10 +203,13 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device):
     ], dim=-1) * seq_attn_masks
     is_answer_mask = is_answer_mask[batch_indices, seq_indices, sorted_indices].bool()
 
-    #TODO: possibly quantize to 8bit
+    # Get labels
+    ignore_index = -100
+    full_labels = full_token_ids.masked_fill(~is_answer_mask > 0, ignore_index)
+    #TODO: get scores looking good; possibly quantize to 8bit
 
     # Calculate ce_loss in batches
-    ppl_bsz = 10
+    ppl_bsz = 1#0
     full_ce_loss = []
     for ppl_idx in range(num_seqs // ppl_bsz):
 
@@ -194,43 +217,52 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device):
         start, end = ppl_idx * ppl_bsz, (ppl_idx + 1) * ppl_bsz
         current_token_ids = full_token_ids[:, start:end, :]
         current_attn_masks = full_attn_masks[:, start:end, :]
-    
+        current_labels = full_labels[:, start:end, :]
+
         # Flatten batch
-        flat_token_ids = current_token_ids.flatten(0, 1).to(device)
-        flat_attn_masks = current_attn_masks.flatten(0, 1).to(device)
+        flat_token_ids = current_token_ids.flatten(0, 1).to(device) #(B * N, L)
+        flat_attn_masks = current_attn_masks.flatten(0, 1).to(device) # (B * N, L)
+        flat_labels = current_labels.flatten(0, 1).to(device) # (B * N, L)
 
         # Calculate logits
         flat_logits = llm_model(
             input_ids=flat_token_ids,
-            labels=flat_token_ids,
             attention_mask=flat_attn_masks
         ).logits
         logits_mem = torch.cuda.memory_allocated()/1024**2 / 1000
         print(f"Memory after logits computation: {logits_mem}")
+
+        # Shift logits and labels
+        flat_logits = flat_logits[:, :-1, :] # (B * N, L-1, V)
+        flat_labels = flat_labels[:, 1:] # (B * N, L-1)
         
         # Compute cross entropy loss
         flat_ce_loss = F.cross_entropy(
-            flat_logits.flatten(0, 1),
-            flat_attn_masks.flatten(0, 1),
-            ignore_index=llm_tokenizer.pad_token_id,
+            flat_logits.flatten(0, 1), # (B * N * (L-1), V)
+            flat_labels.flatten(0, 1), # (B * N * (L-1),)
+            ignore_index=ignore_index,
             reduction="none"
         )
+        print(f"DECODED: {llm_tokenizer.decode(flat_token_ids[0])}")
+        print(f"ATTN MASKS: {flat_attn_masks}")
+        print(f"LABELS: {flat_labels}")
+        print(f"CE loss: {flat_ce_loss}")
+        print(f"PPL: {flat_ce_loss.exp()}")
+        import pdb; pdb.set_trace()
         ce_mem = torch.cuda.memory_allocated()/1024**2 / 1000
         print(f"Memory after CE computation: {ce_mem}")
 
         # Unflatten ce_loss and store it
         full_ce_loss.append(flat_ce_loss.reshape(current_token_ids.shape))
 
-    # Combine all ce_loss and grab answer tokens
-    ce_loss = torch.cat(full_ce_loss, dim=1)
-    ce_loss[is_answer_mask] = 0
+    # Combine all ce_loss
+    ce_loss = torch.cat(full_ce_loss, dim=1) 
     avg_ce_loss = ce_loss.sum(dim=-1) / (ce_loss > 0).sum(dim=-1)
     perplexity = -avg_ce_loss.exp()
-    import pdb; pdb.set_trace()
     return perplexity
 
 
-def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type):
+def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type, maxlen):
     nb_iterations = len(train_loader)
     print_every = nb_iterations // 5
     if log_path:
@@ -255,7 +287,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
                 golden_id.to(device)
             )
             with torch.no_grad(), torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-                perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device)
+                perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, maxlen)
             loss = loss / iters_to_accumulate
             scaler.scale(loss).backward()
         
@@ -363,10 +395,11 @@ def main(args):
         use_auth_token=llm_token
     )
     llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
+    llm_model.resize_token_embeddings(len(llm_tokenizer))
     print("LLM tokenizer successfully loaded")
     
 
-    train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.model_save_path, args.dataset_type)
+    train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.model_save_path, args.dataset_type, maxlen)
          
 
 if __name__=='__main__':
