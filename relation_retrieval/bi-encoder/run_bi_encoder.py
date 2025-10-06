@@ -144,9 +144,9 @@ Answer:
 
 def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, maxlen):
 
-    question = ["[INST] <<SYS>>\n<</SYS>>\n\nWhat is the common word for"]
-    relations = [["canine? [/INST]"]]
-    answer = ["\nDog"]
+    question = ["[INST]\n\nWhat is the common word for"]
+    relations = [["canine? Answer in one word. [/INST] "]]
+    answer = ["Dog"]
 
     # Get questions, relations, and answers encoded by the llm tokenizer
     encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt", add_special_tokens=True) # Include BOS token
@@ -248,6 +248,11 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
         print(f"LABELS: {flat_labels}")
         print(f"CE loss: {flat_ce_loss}")
         print(f"PPL: {flat_ce_loss.exp()}")
+        probs = flat_logits.softmax(dim=-1)[0, -1]
+        preds = probs.topk(10)
+        pred_tokens = llm_tokenizer.decode(preds.indices)
+        print(f"Preds: {preds}")
+        print(f"Predicted tokens: {pred_tokens}")
         import pdb; pdb.set_trace()
         ce_mem = torch.cuda.memory_allocated()/1024**2 / 1000
         print(f"Memory after CE computation: {ce_mem}")
@@ -377,7 +382,7 @@ def main(args):
     lr_scheduler = get_linear_schedule_with_warmup(optimizer=opti, num_warmup_steps=num_warmup_steps, num_training_steps=t_total)
     
     # New code for loading in LLM
-    llm_name = "meta-llama/Llama-2-7b-hf"
+    llm_name = "meta-llama/Llama-2-7b-chat-hf"
     llm_token = os.getenv("HF_AUTH_TOKEN")
     print(f"Loading in LLM and tokenizer: {llm_name}...")
     before_mem = torch.cuda.memory_allocated()/1024**2 / 1000
