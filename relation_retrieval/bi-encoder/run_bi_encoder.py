@@ -144,23 +144,33 @@ Answer:
 
 def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, maxlen):
 
-    question = ["[INST]\n\nWhat is the common word for"]
-    relations = [["canine? Answer in one word. [/INST] "]]
-    answer = ["Dog"]
+    # Format the text custom
+    #question = [
+    #    f"[INST] <<SYS>>\nYou are a helpful assistant answering questions based on a knowledge graph.\n<</SYS>>\n\nAnswer the question in one word or phrase. Use the relevant information from the graph relation provided. Question: {quest}?"
+    #    for quest in question
+    #]
+    #relations = np.array(relations).T # Reshape to be consistent with other tensors
+    #bsz, num_rels = relations.shape
+    #all_relations = list(chain.from_iterable(relations)) # Flatten
+    #for i, rel in enumerate(all_relations):
+    #    if "|" not in rel:
+    #        continue
+    #    rel = rel[:rel.index("|")]
+    #    all_relations[i] = f"Relation: {rel} [/INST] Answer: "
+    
+    # Follow the formatting from AMAR and GMT-KBQA
+
 
     # Get questions, relations, and answers encoded by the llm tokenizer
     encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt", add_special_tokens=True) # Include BOS token
     question_token_ids = encoded_question.input_ids
     question_attn_masks = encoded_question.attention_mask
 
-    relations = np.array(relations).T # Reshape to be consistent with other tensors
-    bsz, num_rels = relations.shape
-    all_relations = list(chain.from_iterable(relations)) # Flatten
     encoded_relations = llm_tokenizer(all_relations, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
     relations_token_ids = encoded_relations.input_ids.reshape((bsz, num_rels, -1)) # Unflatten  #torch.cat([encoded.input_ids[:, None, :] for encoded in encoded_relations], dim=1)
     relations_attn_masks = encoded_relations.attention_mask.reshape((bsz, num_rels, -1)) #torch.cat([encoded.attention_mask[:, None, :] for encoded in encoded_relations], dim=-1)
     
-    #answer = ["user.synedra" for _ in range(bsz)]
+    answer = ["synedra" for _ in range(bsz)]
     encoded_answer = llm_tokenizer(answer, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
     answer_token_ids = encoded_answer.input_ids
     answer_attn_masks = encoded_answer.attention_mask
@@ -205,11 +215,11 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
 
     # Get labels
     ignore_index = -100
-    full_labels = full_token_ids.masked_fill(~is_answer_mask > 0, ignore_index)
+    full_labels = full_token_ids.masked_fill(~is_answer_mask.bool(), ignore_index)
     #TODO: get scores looking good; possibly quantize to 8bit
 
     # Calculate ce_loss in batches
-    ppl_bsz = 1#0
+    ppl_bsz = 10
     full_ce_loss = []
     for ppl_idx in range(num_seqs // ppl_bsz):
 
@@ -243,25 +253,26 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
             ignore_index=ignore_index,
             reduction="none"
         )
-        print(f"DECODED: {llm_tokenizer.decode(flat_token_ids[0])}")
-        print(f"ATTN MASKS: {flat_attn_masks}")
-        print(f"LABELS: {flat_labels}")
-        print(f"CE loss: {flat_ce_loss}")
-        print(f"PPL: {flat_ce_loss.exp()}")
-        probs = flat_logits.softmax(dim=-1)[0, -1]
-        preds = probs.topk(10)
-        pred_tokens = llm_tokenizer.decode(preds.indices)
-        print(f"Preds: {preds}")
-        print(f"Predicted tokens: {pred_tokens}")
-        import pdb; pdb.set_trace()
+        #print(f"DECODED: {llm_tokenizer.decode(flat_token_ids[0])}")
+        #print(f"ATTN MASKS: {flat_attn_masks}")
+        #print(f"LABELS: {flat_labels}")
+        #print(f"CE loss: {flat_ce_loss}")
+        #print(f"PPL: {flat_ce_loss.exp()}")
+        #ans_idx = flat_labels[0].argmax().item()
+        #probs = flat_logits.softmax(dim=-1)[0, ans_idx]
+        #preds = probs.topk(10)
+        #pred_tokens = llm_tokenizer.decode(preds.indices)
+        #print(f"Preds: {preds}")
+        #print(f"Predicted tokens: {pred_tokens}")
+        #import pdb; pdb.set_trace()
         ce_mem = torch.cuda.memory_allocated()/1024**2 / 1000
         print(f"Memory after CE computation: {ce_mem}")
 
         # Unflatten ce_loss and store it
-        full_ce_loss.append(flat_ce_loss.reshape(current_token_ids.shape))
+        full_ce_loss.append(flat_ce_loss.reshape((bsz, ppl_bsz, seq_length - 1)))
 
     # Combine all ce_loss
-    ce_loss = torch.cat(full_ce_loss, dim=1) 
+    ce_loss = torch.cat(full_ce_loss, dim=1)
     avg_ce_loss = ce_loss.sum(dim=-1) / (ce_loss > 0).sum(dim=-1)
     perplexity = -avg_ce_loss.exp()
     return perplexity
