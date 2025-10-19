@@ -148,11 +148,22 @@ Answer:
 """
 )
 
+perplexity_system_prompt = (
+"""
+[INST] You are a semantic parser that converts questions into logical forms. These logical forms could be used to search a knowledge graph to obtain the answer to the question. We provide a relevant relation to help you generate the logical form.
+
+Question: Who is Barack Obama's wife?
+Relation: person.spouse.barack_obama 
+Answer: ( JOIN ( R [ people , person , spouse ] ) [ Barack Obama ] )
+
+"""
+)
+
 def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr):
 
     # Format the text custom
-    question = [
-       f"[INST] <<SYS>>\nYou are a helpful assistant generating logical forms to search a knowledge graph.\n<</SYS>>\n\nGenerate a logical form to answer the following question. Use the relevant information from the graph relation provided. Question: {quest}?"
+    question = [ 
+       perplexity_system_prompt + f"Question: {quest}\n"
        for quest in question
     ]
     relations = np.array(relations).T # Reshape to be consistent with other tensors
@@ -160,36 +171,31 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
     all_relations = list(chain.from_iterable(relations)) # Flatten
     for i, rel in enumerate(all_relations):
        if "|" not in rel:
-           continue
+          continue
        rel = rel[:rel.index("|")]
-       all_relations[i] = f"Relation: {rel} [/INST] Logical form: "
+       all_relations[i] = f"Relation: {rel}\nAnswer: [/INST] "
+    answers = np.array(normed_sexpr).T
+    all_answers = list(chain.from_iterable(answers))
 
     # Get questions, relations, and answers encoded by the llm tokenizer
     encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt", add_special_tokens=True) # Include BOS token
-    question_token_ids = encoded_question.input_ids
-    question_attn_masks = encoded_question.attention_mask
+    question_token_ids = encoded_question.input_ids[:, None, :].repeat((1, num_rels, 1))
+    question_attn_masks = encoded_question.attention_mask[:, None, :].repeat((1, num_rels, 1))
 
     encoded_relations = llm_tokenizer(all_relations, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
     relations_token_ids = encoded_relations.input_ids.reshape((bsz, num_rels, -1)) # Unflatten  #torch.cat([encoded.input_ids[:, None, :] for encoded in encoded_relations], dim=1)
     relations_attn_masks = encoded_relations.attention_mask.reshape((bsz, num_rels, -1)) #torch.cat([encoded.attention_mask[:, None, :] for encoded in encoded_relations], dim=-1)
     
-    encoded_answer = llm_tokenizer(normed_sexpr, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
-    answer_token_ids = encoded_answer.input_ids
-    answer_attn_masks = encoded_answer.attention_mask
-    
-    # Expand question and answer tensors
-    question_repeat_token_ids = question_token_ids[:, None, :].repeat((1, num_rels, 1))
-    question_repeat_attn_masks = question_attn_masks[:, None, :].repeat((1, num_rels, 1))
-
-    answer_repeat_token_ids = answer_token_ids[:, None, :].repeat((1, num_rels, 1))
-    answer_repeat_attn_masks = answer_attn_masks[:, None, :].repeat((1, num_rels, 1))
+    encoded_answer = llm_tokenizer(all_answers, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
+    answer_token_ids = encoded_answer.input_ids.reshape((bsz, num_rels, -1))
+    answer_attn_masks = encoded_answer.attention_mask.reshape((bsz, num_rels, -1))
 
     # Form full sequences
     seq_token_ids = torch.cat([
-        question_repeat_token_ids, relations_token_ids, answer_repeat_token_ids
+        question_token_ids, relations_token_ids, answer_token_ids
     ], dim=-1)
     seq_attn_masks = torch.cat([
-        question_repeat_attn_masks, relations_attn_masks, answer_repeat_attn_masks
+        question_attn_masks, relations_attn_masks, answer_attn_masks
     ], dim=-1)
     bsz, num_seqs, seq_length = seq_token_ids.shape
 
@@ -217,12 +223,12 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
 
     # Get labels
     ignore_index = -100
-    full_labels = full_token_ids.masked_fill(~is_answer_mask.bool(), ignore_index)
+    full_labels = full_token_ids.masked_fill(~is_answer_mask, ignore_index)
     #TODO: get scores looking good; possibly quantize to 8bit
 
-    # Calculate ce_loss in batches
+    # Calculate perplexity in batches
     ppl_bsz = 10
-    full_ce_loss = []
+    full_perplexity = []
     for ppl_idx in range(num_seqs // ppl_bsz):
 
         # Get batch
@@ -260,23 +266,25 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
         #print(f"LABELS: {flat_labels}")
         #print(f"CE loss: {flat_ce_loss}")
         #print(f"PPL: {flat_ce_loss.exp()}")
-        #ans_idx = flat_labels[0].argmax().item()
-        #probs = flat_logits.softmax(dim=-1)[0, ans_idx]
-        #preds = probs.topk(10)
-        #pred_tokens = llm_tokenizer.decode(preds.indices)
+        ans_idx = is_answer_mask[0, 0].float().argmax().item()
+        probs = flat_logits.softmax(dim=-1)[0, ans_idx]
+        preds = probs.topk(10)
+        pred_tokens = llm_tokenizer.decode(preds.indices)
         #print(f"Preds: {preds}")
         #print(f"Predicted tokens: {pred_tokens}")
-        #import pdb; pdb.set_trace()
         ce_mem = torch.cuda.memory_allocated()/1024**2 / 1000
         print(f"Memory after CE computation: {ce_mem}")
 
         # Unflatten ce_loss and store it
-        full_ce_loss.append(flat_ce_loss.reshape((bsz, ppl_bsz, seq_length - 1)))
+        current_ce_loss = flat_ce_loss.reshape((bsz, ppl_bsz, seq_length - 1))
+        avg_ce_loss = current_ce_loss.sum(dim=-1) / (current_ce_loss > 0).sum(dim=-1)
+        current_perplexity = -avg_ce_loss.exp()
+        full_perplexity.append(current_perplexity)
 
     # Combine all ce_loss
-    ce_loss = torch.cat(full_ce_loss, dim=1)
-    avg_ce_loss = ce_loss.sum(dim=-1) / (ce_loss > 0).sum(dim=-1)
-    perplexity = -avg_ce_loss.exp()
+    perplexity = torch.cat(full_perplexity, dim=1)
+    print(llm_tokenizer.decode(full_token_ids[0, 0]))
+    import pdb; pdb.set_trace()
     return perplexity
 
 
