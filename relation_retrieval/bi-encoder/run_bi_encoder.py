@@ -19,6 +19,7 @@ import json
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
+
 load_dotenv()
 
 
@@ -32,6 +33,7 @@ def _parse_args():
     parser.add_argument('--epochs', default=1, type=int, help="1 for CWQ, 3 for WebQSP")
     parser.add_argument('--log_dir', default='log/', type=str)
     parser.add_argument('--cache_dir', default='bert-base-uncased', type=str)
+    parser.add_argument('--perplexity_dir', default='perplexity/', type=str)
     args = parser.parse_args()
     return args
 
@@ -98,6 +100,13 @@ class CustomDataset(Dataset):
 
         with open(f'data/WebQSP/generation/merged/WebQSP_{split}.json') as f: # KUNAL get normed sexpr labels
             self.generation_data = json.loads(f.read())
+        self.generation_data_dict = {
+            gen_data['question']: gen_data
+            for gen_data in self.generation_data
+        }
+        print(f"Length of data before filtering: {len(self.data)}")
+        self.data = self.data[self.data["question"].isin(self.generation_data_dict.keys())].reset_index(drop=True)
+        print(f"Length of data after filtering: {len(self.data)}")
     
     def __len__(self):
         return int(len(self.data) / self.sample_size)
@@ -133,7 +142,7 @@ class CustomDataset(Dataset):
         relations_attn_masks = torch.cat([encoded_relation['attention_mask'] for encoded_relation in encoded_relations], 0)
         relations_token_type_ids = torch.cat([encoded_relation['token_type_ids'] for encoded_relation in encoded_relations], 0)
 
-        normed_sexpr = [gen_data["normed_sexpr"] for gen_data in self.generation_data[start:end]] # KUNAL add
+        normed_sexpr = self.generation_data_dict[question]["normed_sexpr"] if question in self.generation_data_dict else " "# KUNAL add
         
         return question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id[0], normed_sexpr
 
@@ -150,16 +159,17 @@ Answer:
 
 perplexity_system_prompt = (
 """
-[INST] You are a semantic parser that converts questions into logical forms. These logical forms could be used to search a knowledge graph to obtain the answer to the question. We provide a relevant relation to help you generate the logical form.
+[INST] You are a semantic parser that converts questions into logical forms. These logical forms will be later converted into queries that can be used to search a knowledge graph and obtain the answer to the question.
+As a hint, we provide a relevant relation in the knowledge graph that we will need to pass through during our search. Use this information to generate a logical form.
 
 Question: Who is Barack Obama's wife?
 Relation: person.spouse.barack_obama 
-Answer: ( JOIN ( R [ people , person , spouse ] ) [ Barack Obama ] )
+Answer: ( JOIN ( R [ person , spouse ] ) [ Barack Obama ] )
 
 """
 )
 
-def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr):
+def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id):
 
     # Format the text custom
     question = [ 
@@ -174,8 +184,6 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
           continue
        rel = rel[:rel.index("|")]
        all_relations[i] = f"Relation: {rel}\nAnswer: [/INST] "
-    answers = np.array(normed_sexpr).T
-    all_answers = list(chain.from_iterable(answers))
 
     # Get questions, relations, and answers encoded by the llm tokenizer
     encoded_question = llm_tokenizer(question, padding=True, truncation=True, return_tensors="pt", add_special_tokens=True) # Include BOS token
@@ -186,9 +194,9 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
     relations_token_ids = encoded_relations.input_ids.reshape((bsz, num_rels, -1)) # Unflatten  #torch.cat([encoded.input_ids[:, None, :] for encoded in encoded_relations], dim=1)
     relations_attn_masks = encoded_relations.attention_mask.reshape((bsz, num_rels, -1)) #torch.cat([encoded.attention_mask[:, None, :] for encoded in encoded_relations], dim=-1)
     
-    encoded_answer = llm_tokenizer(all_answers, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
-    answer_token_ids = encoded_answer.input_ids.reshape((bsz, num_rels, -1))
-    answer_attn_masks = encoded_answer.attention_mask.reshape((bsz, num_rels, -1))
+    encoded_answer = llm_tokenizer(normed_sexpr, padding=True, truncation=True, return_tensors="pt", add_special_tokens=False)
+    answer_token_ids = encoded_answer.input_ids[:, None, :].repeat((1, num_rels, 1))
+    answer_attn_masks = encoded_answer.attention_mask[:, None, :].repeat((1, num_rels, 1))
 
     # Form full sequences
     seq_token_ids = torch.cat([
@@ -227,7 +235,7 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
     #TODO: get scores looking good; possibly quantize to 8bit
 
     # Calculate perplexity in batches
-    ppl_bsz = 10
+    ppl_bsz = 25
     full_perplexity = []
     for ppl_idx in range(num_seqs // ppl_bsz):
 
@@ -247,14 +255,14 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
             input_ids=flat_token_ids,
             attention_mask=flat_attn_masks
         ).logits
-        logits_mem = torch.cuda.memory_allocated()/1024**2 / 1000
-        print(f"Memory after logits computation: {logits_mem}")
 
         # Shift logits and labels
         flat_logits = flat_logits[:, :-1, :] # (B * N, L-1, V)
         flat_labels = flat_labels[:, 1:] # (B * N, L-1)
         
         # Compute cross entropy loss
+        ce_mem = torch.cuda.mem_get_info()[0] /1024**2 / 1000
+        print(f"Memory before CE computation: {ce_mem}")
         flat_ce_loss = F.cross_entropy(
             flat_logits.flatten(0, 1), # (B * N * (L-1), V)
             flat_labels.flatten(0, 1), # (B * N * (L-1),)
@@ -272,8 +280,6 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
         pred_tokens = llm_tokenizer.decode(preds.indices)
         #print(f"Preds: {preds}")
         #print(f"Predicted tokens: {pred_tokens}")
-        ce_mem = torch.cuda.memory_allocated()/1024**2 / 1000
-        print(f"Memory after CE computation: {ce_mem}")
 
         # Unflatten ce_loss and store it
         current_ce_loss = flat_ce_loss.reshape((bsz, ppl_bsz, seq_length - 1))
@@ -283,12 +289,29 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
 
     # Combine all ce_loss
     perplexity = torch.cat(full_perplexity, dim=1)
-    print(llm_tokenizer.decode(full_token_ids[0, 0]))
-    import pdb; pdb.set_trace()
+    #print(llm_tokenizer.decode(full_token_ids[0, 0]))
+    #print(perplexity.sort())
+    #print(f"Golden id: {golden_id}")
     return perplexity
 
+def calculate_replug_loss(scores, perplexity):
+    scores_probs = scores.log_softmax(dim=-1)
+    perplexity_probs = perplexity.log_softmax(dim=-1)
+    kl_div = F.kl_div(scores_probs, perplexity_probs, log_target=True, reduction='batchmean')
+    return kl_div
 
-def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type):
+def get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it):
+    perplexity_paths = [ os.path.join(perplexity_dir, f"{i+it}.pt") for i in range(len(question)) ]
+    if all([os.path.exists(path) for path in perplexity_paths]):
+        perplexity = torch.stack([torch.load(path) for path in perplexity_paths], dim=0)
+    else:
+        with torch.no_grad(), torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
+            perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id)
+        for i, ppl in enumerate(perplexity):
+            torch.save(perplexity[i], perplexity_paths[i])
+    return perplexity
+
+def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type, perplexity_dir):
     nb_iterations = len(train_loader)
     print_every = nb_iterations // 5
     if log_path:
@@ -303,7 +326,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
         
         for it, train_batch in enumerate(tqdm(train_loader)):
             question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = train_batch           
-            scores, loss = model(
+            scores, old_loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
                 question_token_type_ids.to(device),
@@ -312,9 +335,10 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
                 relations_token_type_ids.to(device),
                 golden_id.to(device)
             )
-            with torch.no_grad(), torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-                perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr)
+            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it)
+            loss = calculate_replug_loss(scores, perplexity)
             loss = loss / iters_to_accumulate
+            print(f"Loss: {loss}")
             scaler.scale(loss).backward()
         
             if (it + 1) % iters_to_accumulate == 0:
@@ -368,7 +392,8 @@ def main(args):
     iters_to_accumulate = 2  # the gradient accumulation adds gradients over an effective batch of size : bs * iters_to_accumulate. If set to "1", you get the usual batch size
     lr = 2e-5  # learning rate
     epochs = args.epochs
-    log_path = os.path.join(args.log_dir, 'log.txt') 
+    log_path = os.path.join(args.log_dir, 'log.txt')
+    perplexity_dir = os.path.join(args.perplexity_dir, args.dataset_type)
     
     if args.add_special_tokens:
         print('add special tokens')
@@ -425,7 +450,7 @@ def main(args):
     print("LLM tokenizer successfully loaded")
     
 
-    train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.model_save_path, args.dataset_type)
+    train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.model_save_path, args.dataset_type, perplexity_dir)
          
 
 if __name__=='__main__':
