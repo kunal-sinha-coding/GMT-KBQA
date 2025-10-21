@@ -15,6 +15,7 @@ import argparse
 from dotenv import load_dotenv
 from itertools import chain
 import json
+import wandb
 
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
@@ -354,6 +355,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
             )
             loss = calculate_replug_loss(scores, perplexity)
             loss = loss / iters_to_accumulate
+            wandb.log({ "train_loss": loss.item() })
             scaler.scale(loss).backward()
         
             if (it + 1) % iters_to_accumulate == 0:
@@ -377,6 +379,10 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
             val_loss, accuracy = evaluate(model, device, val_loader)
             print("Epoch {} complete! Validation Loss : {}".format(ep+1, val_loss))
             print("Accuracy on dev data: {}\n".format(accuracy))
+            wandb.log({
+                "val_loss": val_loss,
+                "val_accuracy": accuracy
+            })
             if log_w:
                 log_w.write("Epoch {} complete! Validation Loss : {}\n".format(ep+1, val_loss))
                 log_w.write("Accuracy on dev data: {}\n".format(accuracy))
@@ -400,6 +406,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
  
 
 def main(args):
+    wandb.init(project="ragnet")
     bert_model = args.cache_dir
     freeze_bert = False
     maxlen = args.max_len
