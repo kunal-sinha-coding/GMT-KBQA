@@ -19,7 +19,7 @@ import json
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
-
+MAX_RETRIES = 3
 load_dotenv()
 
 
@@ -169,7 +169,7 @@ Answer: ( JOIN ( R [ person , spouse ] ) [ Barack Obama ] )
 """
 )
 
-def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id):
+def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, ppl_bsz, golden_id):
 
     # Format the text custom
     question = [ 
@@ -235,7 +235,6 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
     #TODO: get scores looking good; possibly quantize to 8bit
 
     # Calculate perplexity in batches
-    ppl_bsz = 25
     full_perplexity = []
     for ppl_idx in range(num_seqs // ppl_bsz):
 
@@ -261,8 +260,9 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
         flat_labels = flat_labels[:, 1:] # (B * N, L-1)
         
         # Compute cross entropy loss
-        ce_mem = torch.cuda.mem_get_info()[0] /1024**2 / 1000
-        print(f"Memory before CE computation: {ce_mem}")
+        torch.cuda.empty_cache()
+        #ce_mem = torch.cuda.mem_get_info()[0] /1024**2 / 1000
+        #print(f"Memory before CE computation: {ce_mem}")
         flat_ce_loss = F.cross_entropy(
             flat_logits.flatten(0, 1), # (B * N * (L-1), V)
             flat_labels.flatten(0, 1), # (B * N * (L-1),)
@@ -274,10 +274,10 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
         #print(f"LABELS: {flat_labels}")
         #print(f"CE loss: {flat_ce_loss}")
         #print(f"PPL: {flat_ce_loss.exp()}")
-        ans_idx = is_answer_mask[0, 0].float().argmax().item()
-        probs = flat_logits.softmax(dim=-1)[0, ans_idx]
-        preds = probs.topk(10)
-        pred_tokens = llm_tokenizer.decode(preds.indices)
+        #ans_idx = is_answer_mask[0, 0].float().argmax().item()
+        #probs = flat_logits.softmax(dim=-1)[0, ans_idx]
+        #preds = probs.topk(10)
+        #pred_tokens = llm_tokenizer.decode(preds.indices)
         #print(f"Preds: {preds}")
         #print(f"Predicted tokens: {pred_tokens}")
 
@@ -300,18 +300,32 @@ def calculate_replug_loss(scores, perplexity):
     kl_div = F.kl_div(scores_probs, perplexity_probs, log_target=True, reduction='batchmean')
     return kl_div
 
-def get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it):
-    perplexity_paths = [ os.path.join(perplexity_dir, f"{i+it}.pt") for i in range(len(question)) ]
+def get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it, skip_loss):
+    bsz = len(question)
+    start, end = bsz * it, bsz * (it + 1)
+    perplexity_paths = [ os.path.join(perplexity_dir, f"{i}.pt") for i in range(start, end) ]
     if all([os.path.exists(path) for path in perplexity_paths]):
+        if skip_loss:
+            return None
         perplexity = torch.stack([torch.load(path) for path in perplexity_paths], dim=0)
     else:
         with torch.no_grad(), torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
-            perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id)
+            ppl_bsz = 100
+            for retry in range(MAX_RETRIES):
+                try:
+                    perplexity = calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, ppl_bsz, golden_id)
+                    break
+                except Exception as error:
+                    print(f"ERROR: {str(error)}")
+                    torch.cuda.empty_cache()
+                    time.sleep(retry * 1)
+                    ppl_bsz /= 2
+                    continue
         for i, ppl in enumerate(perplexity):
             torch.save(perplexity[i], perplexity_paths[i])
     return perplexity
 
-def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type, perplexity_dir):
+def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, model_save_path, dataset_type, perplexity_dir, skip_loss=True):
     nb_iterations = len(train_loader)
     print_every = nb_iterations // 5
     if log_path:
@@ -326,6 +340,9 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
         
         for it, train_batch in enumerate(tqdm(train_loader)):
             question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = train_batch           
+            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it, skip_loss)
+            if skip_loss:
+                continue
             scores, old_loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
@@ -335,10 +352,8 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
                 relations_token_type_ids.to(device),
                 golden_id.to(device)
             )
-            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it)
             loss = calculate_replug_loss(scores, perplexity)
             loss = loss / iters_to_accumulate
-            print(f"Loss: {loss}")
             scaler.scale(loss).backward()
         
             if (it + 1) % iters_to_accumulate == 0:
