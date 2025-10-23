@@ -173,7 +173,16 @@ def encode_questions(
     model = BiEncoderModule(device, bert_model=bert_model, tokenizer=tokenizer, freeze_bert=True)
     
     print("Loading the weights of the model...")
-    model.load_state_dict(torch.load(model_path))
+    #model.load_state_dict(torch.load(model_path))
+    # KUNAL ADD: Drop unnecessary keys
+    state_dict = torch.load(model_path)
+    for k in list(state_dict.keys()):
+        if "position_ids" in k:
+            del state_dict[k]
+    missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    print(f"⚠️ Missing keys: {missing}")
+    print(f"⚠️ Unexpected keys: {unexpected}")
+    
     model.to(device)
     model.eval()
     

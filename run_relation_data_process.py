@@ -235,13 +235,13 @@ def sample_data(dataset, split):
                     f'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{sp}.goldenRelation.json',
                 )
                 
-        if split != 'test':
-            sample_data_rich_relation(
-                'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(split),
-                'data/common_data/freebase_relations_filtered.json',
-                'data/common_data/fb_relation_rich_map.json',
-                'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.sampled.tsv'.format(split)
-            )
+        #if split != 'test': # KUNAL comment out
+        sample_data_rich_relation(
+            'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(split),
+            'data/common_data/freebase_relations_filtered.json',
+            'data/common_data/fb_relation_rich_map.json',
+            'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.sampled.tsv'.format(split)
+        )
 
         prepare_2hop_relations(dataset)
 

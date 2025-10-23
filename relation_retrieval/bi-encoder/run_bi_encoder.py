@@ -46,7 +46,7 @@ def data_process(dataset_type):
     else:
         # Use the model saved in last epoch
         train_df = pd.read_csv('data/WebQSP/relation_retrieval/bi-encoder/WebQSP.train.sampled.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
-        dev_df = None
+        dev_df = pd.read_csv('data/WebQSP/relation_retrieval/bi-encoder/WebQSP.test.sampled.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
     
     return train_df, dev_df
 
@@ -69,8 +69,8 @@ def evaluate(model, device, dataloader):
     preds = []
     
     with torch.no_grad():
-        for question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id in tqdm(dataloader):
-            scores, loss = model(
+        for question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr in tqdm(dataloader):
+            scores, old_loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
                 question_token_type_ids.to(device),
@@ -358,6 +358,7 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
             wandb.log({ "train_loss": loss.item() })
             scaler.scale(loss).backward()
         
+            iters_to_accumulate = 1
             if (it + 1) % iters_to_accumulate == 0:
                 scaler.step(opti)
                 # Updates the scale for next iteration.
@@ -434,7 +435,8 @@ def main(args):
     if dev_df is not None:
         print("Reading validation data...")
         print(dev_df.shape)
-        val_set = CustomDataset(dev_df, maxlen, split="dev", tokenizer=tokenizer, bert_model=bert_model)
+        # KUNAL edit - make this test not dev
+        val_set = CustomDataset(dev_df, maxlen, split="test", tokenizer=tokenizer, bert_model=bert_model)
         val_loader = DataLoader(val_set, batch_size=bs, num_workers=2)
     else:
         val_loader = None
