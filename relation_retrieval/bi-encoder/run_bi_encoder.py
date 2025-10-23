@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from itertools import chain
 import json
 import wandb
+import time
 
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
@@ -60,7 +61,7 @@ def set_seed(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 
-def evaluate(model, device, dataloader):
+def evaluate(model, llm_model, llm_tokenizer, device, dataloader):
     model.eval()
     
     mean_loss = 0
@@ -69,7 +70,9 @@ def evaluate(model, device, dataloader):
     preds = []
     
     with torch.no_grad():
-        for question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr in tqdm(dataloader):
+        for batch in tqdm(dataloader):
+            question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = batch           
+            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id)
             scores, old_loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
@@ -79,7 +82,9 @@ def evaluate(model, device, dataloader):
                 relations_token_type_ids.to(device),
                 golden_id.to(device)
             )
-            mean_loss += loss
+            loss = calculate_replug_loss(scores, perplexity)
+            wandb.log({ "test_loss": loss.item() })
+            mean_loss += loss.item()
             count += 1
             pred_id = torch.argmax(scores, dim=1) 
             # print('pred_id: {}'.format(pred_id.shape))
@@ -87,7 +92,9 @@ def evaluate(model, device, dataloader):
             preds += pred_id.tolist()
             golden_truth += golden_id.tolist()
     
+    wandb.log({ "test_loss_epoch": mean_loss / count})
     accuracy = accuracy_score(golden_truth, preds)
+    wandb.log({ "test_acc": accuracy })
     
     return mean_loss / count, accuracy
     
@@ -301,11 +308,15 @@ def calculate_replug_loss(scores, perplexity):
     kl_div = F.kl_div(scores_probs, perplexity_probs, log_target=True, reduction='batchmean')
     return kl_div
 
-def get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it, skip_loss):
+def get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, it=0, skip_loss=False, perplexity_dir=None):
     bsz = len(question)
     start, end = bsz * it, bsz * (it + 1)
-    perplexity_paths = [ os.path.join(perplexity_dir, f"{i}.pt") for i in range(start, end) ]
-    if all([os.path.exists(path) for path in perplexity_paths]):
+    perplexity_paths = [ 
+        os.path.join(perplexity_dir, f"{i}.pt") 
+        for i in range(start, end)
+        if perplexity_dir
+    ]
+    if perplexity_dir and all([os.path.exists(path) for path in perplexity_paths]):
         if skip_loss:
             return None
         perplexity = torch.stack([torch.load(path) for path in perplexity_paths], dim=0)
@@ -334,14 +345,18 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
     scaler = GradScaler()
     best_loss = np.Inf
     best_epoch = 1
+
+    best_loss, best_epoch = run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_type, model_save_path, 0, log_w, best_loss, best_epoch)
     
-    for ep in range(epochs):
+    for ep in range(1, epochs + 1):
         model.train()
         running_loss = 0.0
+        mean_loss = 0.0
+        count = 0
         
         for it, train_batch in enumerate(tqdm(train_loader)):
             question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = train_batch           
-            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, perplexity_dir, it, skip_loss)
+            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, it, skip_loss, perplexity_dir)
             if skip_loss:
                 continue
             scores, old_loss = model(
@@ -375,35 +390,43 @@ def train_bert(model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_lo
                         .format(it+1, nb_iterations, ep+1, running_loss / print_every))
 
                 running_loss = 0.0
+            mean_loss += loss.item()
+            count += 1
+        wandb.log({"train_loss_epoch": mean_loss / count})
         
-        if val_loader:
-            val_loss, accuracy = evaluate(model, device, val_loader)
-            print("Epoch {} complete! Validation Loss : {}".format(ep+1, val_loss))
-            print("Accuracy on dev data: {}\n".format(accuracy))
-            wandb.log({
-                "val_loss": val_loss,
-                "val_accuracy": accuracy
-            })
-            if log_w:
-                log_w.write("Epoch {} complete! Validation Loss : {}\n".format(ep+1, val_loss))
-                log_w.write("Accuracy on dev data: {}\n".format(accuracy))
-        # Recording validation loss, while still saving models of every epoch
-        model_copy = copy.deepcopy(model)
-        if val_loss < best_loss:
-            print("Best validation loss improved from {} to {}".format(best_loss, val_loss))
-            print()
-            best_loss = val_loss
-            best_epoch = ep+1
-        
-        model_path = os.path.join(model_save_path, '{}_ep_{}.pt'.format(dataset_type, ep+1))
-        torch.save(model_copy.state_dict(), model_path)
-        print("The model has been saved in {}".format(model_path))
+        best_loss, best_epoch = run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_type, model_save_path, ep, log_w, best_loss, best_epoch)
 
     if log_w:
         log_w.close()
     print('Best epoch is: {}, with validation loss: {}'.format(best_epoch, best_loss))
     del loss
     torch.cuda.empty_cache()
+
+def run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_type, model_save_path, ep, log_w, best_loss, best_epoch):
+    if val_loader:
+        val_loss, accuracy = evaluate(model, llm_model, llm_tokenizer, device, val_loader)
+        print("Epoch {} complete! Validation Loss : {}".format(ep, val_loss))
+        print("Accuracy on dev data: {}\n".format(accuracy))
+        wandb.log({
+            "val_loss": val_loss,
+            "val_accuracy": accuracy
+        })
+        if log_w:
+            log_w.write("Epoch {} complete! Validation Loss : {}\n".format(ep, val_loss))
+            log_w.write("Accuracy on dev data: {}\n".format(accuracy))
+    # Recording validation loss, while still saving models of every epoch
+    model_copy = copy.deepcopy(model)
+    if val_loss < best_loss:
+        print("Best validation loss improved from {} to {}".format(best_loss, val_loss))
+        print()
+        best_loss = val_loss
+        best_epoch = ep
+    
+    model_path = os.path.join(model_save_path, '{}_ep_{}.pt'.format(dataset_type, ep))
+    torch.save(model_copy.state_dict(), model_path)
+    print("The model has been saved in {}".format(model_path))
+    return best_loss, best_epoch
+
  
 
 def main(args):
