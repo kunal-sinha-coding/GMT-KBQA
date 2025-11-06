@@ -24,9 +24,10 @@ python relation_retrieval/bi-encoder/run_bi_encoder.py \
                             --dataset_type WebQSP \
                             --model_save_path ${exp_prefix} \
                             --max_len 60 \
-                            --batch_size 1 \
+                            --batch_size 4 \
                             --epochs 3 \
                             --log_dir ${log_dir} \
-                            --cache_dir bert-base-uncased
-			    --perplexity_dir ${perplexity_dir}
+                            --cache_dir bert-base-uncased \
+			    --perplexity_dir ${perplexity_dir} \
+			    --start 0
 

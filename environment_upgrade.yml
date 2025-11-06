@@ -1,0 +1,24 @@
+name: gmtupgrade
+channels:
+  - pytorch
+  - conda-forge
+  - nvidia
+  - anaconda
+  - defaults
+dependencies:
+  - python=3.11
+  - requests
+  - tqdm
+  - nltk
+  - pandas
+  - pytorch
+  - scikit-learn
+  - glob2
+  - networkx
+  - pyodbc
+  - pip
+  - sparqlwrapper
+  - urllib3
+  - transformers
+  - numpy
+  - faiss-gpu
