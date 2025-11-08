@@ -63,6 +63,7 @@ def set_seed(seed):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
+DEBUG_PATH = "debug.txt"
 
 def evaluate(model, llm_model, llm_tokenizer, device, dataloader):
     model.eval()
@@ -71,12 +72,15 @@ def evaluate(model, llm_model, llm_tokenizer, device, dataloader):
     count = 0
     golden_truth = []
     preds = []
+
+    with open(DEBUG_PATH, "a") as f:
+        f.write(f"\n\n\nEVALUATION:\n\n\n")
     
     with torch.no_grad():
-        for batch in tqdm(dataloader):
+        for it, batch in enumerate(tqdm(dataloader)):
             count += 1
-            question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = batch           
-            perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id)
+            question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = batch
+            perplexity = get_perplexity(llm_model, llm_tokenizer, relations, question, device, normed_sexpr, golden_id)
             scores, old_loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
@@ -86,7 +90,7 @@ def evaluate(model, llm_model, llm_tokenizer, device, dataloader):
                 relations_token_type_ids.to(device),
                 golden_id.to(device)
             )
-            loss = calculate_replug_loss(scores, perplexity)
+            loss = calculate_replug_loss(scores, perplexity, relations, question, it, normed_sexpr)
             wandb.log({ "test_loss": loss.item() })
             mean_loss += loss.item()
             pred_id = torch.argmax(scores, dim=1) 
@@ -127,6 +131,7 @@ class CustomDataset(Dataset):
         end = min(self.sample_size*(index+1), len(self.data))
         question = str(self.data.loc[start, 'question'])
         relations = [str(self.data.loc[i, 'relation']) for i in range(start, end)]
+        print(f"Start: {start}, End: {end}, Sample size: {self.sample_size}, Index: {index}")
         golden_id = [i-start for i in range(start, end) if self.data.loc[i, 'label'] == 1]
         assert len(golden_id) == 1, print(start, end)
         
@@ -186,8 +191,6 @@ debug_system_prompt = (
 """
 )
 
-DEBUG_PATH = "debug.txt"
-
 def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, ppl_bsz, golden_id):
 
     # Format the text custom
@@ -195,9 +198,9 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
        full_system_prompt + f"Question: {quest}\n"
        for quest in question
     ]
-    relations = np.array(relations).T # Reshape to be consistent with other tensors
-    bsz, num_rels = relations.shape
-    all_relations = list(chain.from_iterable(relations)) # Flatten
+    relations_array = np.array(relations).T # Reshape to be consistent with other tensors
+    bsz, num_rels = relations_array.shape
+    all_relations = list(chain.from_iterable(relations_array)) # Flatten
     for i, rel in enumerate(all_relations):
        if "|" not in rel:
           continue
@@ -312,18 +315,20 @@ def calculate_perplexity(llm_model, llm_tokenizer, question, relations, device, 
     perplexity = torch.cat(full_perplexity, dim=1)
     return perplexity
 
-def calculate_replug_loss(scores, perplexity, relations, question, gamma=10, it=None, normed_sexpr=None):
-    relations = np.array(relations).T
+def calculate_replug_loss(scores, perplexity, relations, question, it=None, normed_sexpr=None, gamma=10):
+    import pdb; pdb.set_trace()
+    relations_array = np.array(relations).T
     scores_probs = scores.log_softmax(dim=-1)
     perplexity_probs = (perplexity * gamma).log_softmax(dim=-1)
     with open(DEBUG_PATH, "a") as f:
         f.write(f"Question for iteration{it}: {question}\n\n")
-        for i in range(len(relations)):
-            predicted_relations = [relations[i, j.item()] for j in scores_probs[i].topk(5).indices]
-            perplexity_relations = [relations[i, j.item()] for j in perplexity_probs[i].topk(5).indices]
+        for i in range(len(relations_array)):
+            predicted_relations = [relations_array[i, j.item()] for j in scores_probs[i].topk(5).indices]
+            perplexity_relations = [relations_array[i, j.item()] for j in perplexity_probs[i].topk(5).indices]
             f.write(f"Predicted relations: {predicted_relations}\n")
             f.write(f"Perplexity relations: {perplexity_relations}\n")
             f.write(f"Normed sexpr: {normed_sexpr}\n\n")
+            import pdb; pdb.set_trace()
         kl_div = F.kl_div(scores_probs, perplexity_probs, log_target=True, reduction='none').sum(dim=-1)
         f.write(f"Loss: {kl_div}\n\n")
     return kl_div.mean(dim=0)
@@ -375,14 +380,17 @@ def train_bert(
         model.train()
         running_loss = 0.0
         mean_loss = 0.0
+        count = 0
         
         for it, train_batch in enumerate(tqdm(train_loader)):
+            continue
             if it < int(len(train_loader) * start):
                 continue
             question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = train_batch           
             perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, it, skip_loss, perplexity_dir)
             if skip_loss:
                 continue
+            count += 1
             scores, old_loss = model(
                 question_token_ids.to(device),
                 question_attn_masks.to(device),
@@ -414,15 +422,23 @@ def train_bert(
 
                 running_loss = 0.0
             mean_loss += loss.item()
-        wandb.log({"train_loss_epoch": mean_loss / count})
+            save_model(model, model_save_path, dataset_type, ep)
         
-        best_loss, best_epoch = run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_type, model_save_path, ep, log_w, best_loss, best_epoch)
+        if count > 0:
+            wandb.log({"train_loss_epoch": mean_loss / count})
+        best_loss, best_epoch = run_evaluation(model, llm_model, llm_tokenizer, device, train_loader, dataset_type, model_save_path, ep, log_w, best_loss, best_epoch)
 
     if log_w:
         log_w.close()
     print('Best epoch is: {}, with validation loss: {}'.format(best_epoch, best_loss))
     del loss
     torch.cuda.empty_cache()
+
+def save_model(model, model_save_path, dataset_type, ep):
+    model_copy = copy.deepcopy(model)
+    model_path = os.path.join(model_save_path, '{}_ep_{}.pt'.format(dataset_type, ep))
+    torch.save(model_copy.state_dict(), model_path)
+    print("The model has been saved in {}".format(model_path))
 
 def run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_type, model_save_path, ep, log_w, best_loss, best_epoch):
     if val_loader:
@@ -433,16 +449,11 @@ def run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_
             log_w.write("Epoch {} complete! Validation Loss : {}\n".format(ep, val_loss))
             log_w.write("Accuracy on dev data: {}\n".format(accuracy))
     # Recording validation loss, while still saving models of every epoch
-    model_copy = copy.deepcopy(model)
     if val_loss < best_loss:
         print("Best validation loss improved from {} to {}".format(best_loss, val_loss))
         print()
         best_loss = val_loss
         best_epoch = ep
-    
-    model_path = os.path.join(model_save_path, '{}_ep_{}.pt'.format(dataset_type, ep))
-    torch.save(model_copy.state_dict(), model_path)
-    print("The model has been saved in {}".format(model_path))
     return best_loss, best_epoch
 
  
