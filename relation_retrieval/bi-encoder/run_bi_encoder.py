@@ -18,6 +18,7 @@ import json
 import wandb
 import time
 from consts import full_system_prompt
+from ragnet.evaluate_ragnet import load_llm_and_tokenizer
 
 from biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
@@ -534,26 +535,7 @@ def main(args):
     lr_scheduler = get_linear_schedule_with_warmup(optimizer=opti, num_warmup_steps=num_warmup_steps, num_training_steps=t_total)
     
     # New code for loading in LLM
-    llm_name = "meta-llama/Llama-2-7b-chat-hf"
-    llm_token = os.getenv("HF_AUTH_TOKEN")
-    print(f"Loading in LLM and tokenizer: {llm_name}...")
-    before_mem = torch.cuda.memory_allocated()/1024**2 / 1000
-    print(f"Before loading in LLM: {before_mem:.2f} GB of CUDA memory used")
-    llm_model = AutoModelForCausalLM.from_pretrained(
-        llm_name,
-        torch_dtype=torch.bfloat16,
-        use_auth_token=llm_token
-    ).to(device)
-    after_mem = torch.cuda.memory_allocated()/1024**2 / 1000
-    print(f"After loading in LLM: {after_mem:.2f} GB of CUDA memory used")
-    print(f"Total LLM CUDA memory usage: {(after_mem - before_mem):.2f} GB")
-    llm_tokenizer = AutoTokenizer.from_pretrained(
-        llm_name, use_fast=False,
-        use_auth_token=llm_token
-    )
-    llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
-    llm_model.resize_token_embeddings(len(llm_tokenizer))
-    print("LLM tokenizer successfully loaded")
+    llm_model, llm_tokenizer = load_llm_and_tokenizer()
     with open(DEBUG_PATH, "a") as f:
         f.write(f"\n\n\nEXPERIMENT: {wandb_run.name}-{wandb_run.id}\n\n\n")
     
