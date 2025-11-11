@@ -29,5 +29,6 @@ python relation_retrieval/bi-encoder/run_bi_encoder.py \
                             --log_dir ${log_dir} \
                             --cache_dir bert-base-uncased \
 			    --perplexity_dir ${perplexity_dir} \
-			    --start 0
+			    --start 0 \
+			    --use_baseline
 
