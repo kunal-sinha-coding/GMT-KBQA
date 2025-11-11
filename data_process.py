@@ -115,13 +115,13 @@ def make_sorted_relation_dataset_from_logits(dataset, split):
     
     
     if dataset=='CWQ':
-        tsv_file = f'data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.{split}.tsv'
-        logits_file = f'data/CWQ/relation_retrieval/cross-encoder/saved_models/mask_mention_1epoch_question_relation/CWQ_ep_1.pt_{split}/logits.pt'
-        idmap = load_json(f'data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ_{split}_id_index_map.json')
+        tsv_file = f'data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.{split}.tsv'
+        logits_file = f'data/CWQ/relation_retrieval/cross_encoder/saved_models/mask_mention_1epoch_question_relation/CWQ_ep_1.pt_{split}/logits.pt'
+        idmap = load_json(f'data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ_{split}_id_index_map.json')
     elif dataset=='WebQSP':
-        tsv_file = f'data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.{split}.tsv'
-        logits_file = f'data/WebQSP/relation_retrieval/cross-encoder/saved_models/rich_relation_3epochs_question_relation/WebQSP_ep_3.pt_{split}/logits.pt'
-        idmap = load_json(f'data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP_{split}_id_index_map.json')
+        tsv_file = f'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.{split}.tsv'
+        logits_file = f'data/WebQSP/relation_retrieval/cross_encoder/saved_models/rich_relation_3epochs_question_relation/WebQSP_ep_3.pt_{split}/logits.pt'
+        idmap = load_json(f'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP_{split}_id_index_map.json')
     
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -717,7 +717,7 @@ def substitude_relations_in_merged_file(
     """
     prev_merged = load_json(prev_merged_path)
     sorted_relations = load_json(sorted_relations_path) # inference on 2hop
-    additional_relation = load_json(addition_relations_path) # inference on bi-encoder top100
+    additional_relation = load_json(addition_relations_path) # inference on bi_encoder top100
     new_merged = []
     for example in tqdm(prev_merged, total=len(prev_merged)):
         qid = example["ID"]

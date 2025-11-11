@@ -42,26 +42,26 @@ def _parse_args():
 def data_process(args):
     if args.do_train or args.do_eval:
         if args.dataset_type == 'WebQSP':
-            train_df = pd.read_csv('data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.train.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
+            train_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.train.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
             dev_df = None
             test_df = None
         else:
-            train_df = pd.read_csv('data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.train.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
-            dev_df = pd.read_csv('data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.dev.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
-            test_df = pd.read_csv('data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.test.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            train_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.train.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            dev_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.dev.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            test_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.test.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
         return train_df, dev_df, test_df
     elif args.do_predict:
         print('do inference')
         if args.dataset_type.lower() == 'webqsp':
-            train_2hop_df = pd.read_csv('data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.train_2hop.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
-            train_df = pd.read_csv('data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.train.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
-            test_2hop_df = pd.read_csv('data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.test_2hop.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
-            test_df = pd.read_csv('data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.test.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            train_2hop_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.train_2hop.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            train_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.train.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
+            test_2hop_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.test_2hop.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            test_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.test.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
             return train_2hop_df, train_df, test_2hop_df, test_df
         else:
-            train_df = pd.read_csv('data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.train.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
-            dev_df = pd.read_csv('data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.dev.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
-            test_df = pd.read_csv('data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.test.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            train_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.train.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            dev_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.dev.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
+            test_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.test.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
             return train_df, dev_df, test_df
 
     

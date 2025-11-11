@@ -2,8 +2,8 @@ ACTION=${1:-none}
 exp_id=${2:-none}
 
 dataset='WebQSP'
-exp_prefix="data/WebQSP/relation_retrieval/cross-encoder/saved_models/${exp_id}/"
-log_dir="data/WebQSP/relation_retrieval/cross-encoder/saved_models/${exp_id}/"
+exp_prefix="data/WebQSP/relation_retrieval/cross_encoder/saved_models/${exp_id}/"
+log_dir="data/WebQSP/relation_retrieval/cross_encoder/saved_models/${exp_id}/"
 
 
 if [ "$ACTION" = "train" ]; then
@@ -18,7 +18,7 @@ if [ "$ACTION" = "train" ]; then
     else
         mkdir ${log_dir}
     fi
-    python relation_retrieval/cross-encoder/cross_encoder_main.py \
+    python relation_retrieval/cross_encoder/cross_encoder_main.py \
                             --do_train \
                             --max_len 34 \
                             --batch_size 128 \
@@ -38,7 +38,7 @@ elif [ "$ACTION" = "eval" ]; then
         mkdir "${exp_prefix}${model_name}_${split}/"
     fi
     echo "Evaluating ${split}"
-    python relation_retrieval/cross-encoder/cross_encoder_main.py \
+    python relation_retrieval/cross_encoder/cross_encoder_main.py \
                             --do_eval \
                             --predict_split ${split} \
                             --max_len 34 \
@@ -59,7 +59,7 @@ elif [ "$ACTION" = "predict" ]; then
         mkdir "${exp_prefix}${model_name}_${split}/"
     fi
     echo "Predicting ${split}"
-    python relation_retrieval/cross-encoder/cross_encoder_main.py \
+    python relation_retrieval/cross_encoder/cross_encoder_main.py \
                             --do_predict \
                             --predict_split ${split} \
                             --max_len 34 \

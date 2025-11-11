@@ -206,41 +206,41 @@ def validate_data_sequence(
 
 def sample_data(dataset, split):
     if dataset.lower() == 'cwq':
-        if not os.path.exists('data/CWQ/relation_retrieval/bi-encoder/CWQ.{}.goldenRelation.json'.format(split)):
+        if not os.path.exists('data/CWQ/relation_retrieval/bi_encoder/CWQ.{}.goldenRelation.json'.format(split)):
             for sp in ['train', 'dev', 'test']:
                 extract_golden_relations_cwq(
                     'data/CWQ/sexpr/CWQ.{}.expr.json'.format(sp),
-                    'data/CWQ/relation_retrieval/bi-encoder/CWQ.{}.goldenRelation.json'.format(sp)
+                    'data/CWQ/relation_retrieval/bi_encoder/CWQ.{}.goldenRelation.json'.format(sp)
                 )
         if split != 'test':
             sample_data_mask_entity_mention(
-                'data/CWQ/relation_retrieval/bi-encoder/CWQ.{}.goldenRelation.json'.format(split),
+                'data/CWQ/relation_retrieval/bi_encoder/CWQ.{}.goldenRelation.json'.format(split),
                 'data/CWQ/entity_retrieval/disamb_entities/CWQ_merged_{}_disamb_entities.json'.format(split),
                 'data/common_data/freebase_relations_filtered.json',
-                'data/CWQ/relation_retrieval/bi-encoder/CWQ.{}.sampled.tsv'.format(split)
+                'data/CWQ/relation_retrieval/bi_encoder/CWQ.{}.sampled.tsv'.format(split)
             )
     elif dataset.lower() == 'webqsp':
         if not os.path.exists('data/WebQSP/origin/WebQSP.pdev.json'):
             print('Dividing ptrain and pdev')
             make_partial_train_dev('data/WebQSP/origin/WebQSP.train.json')
-        if not os.path.exists('data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(split)):
+        if not os.path.exists('data/WebQSP/relation_retrieval/bi_encoder/WebQSP.{}.goldenRelation.json'.format(split)):
             for sp in ['train', 'ptrain', 'pdev', 'test']:
                 print('extract golden relations')
                 extract_golden_relations_webqsp(
                     'data/WebQSP/origin/WebQSP.{}.json'.format(sp),
-                    'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(sp)
+                    'data/WebQSP/relation_retrieval/bi_encoder/WebQSP.{}.goldenRelation.json'.format(sp)
                 )
                 validate_data_sequence(
                     f'data/WebQSP/origin/WebQSP.{sp}.json',
-                    f'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{sp}.goldenRelation.json',
+                    f'data/WebQSP/relation_retrieval/bi_encoder/WebQSP.{sp}.goldenRelation.json',
                 )
                 
         #if split != 'test': # KUNAL comment out
         sample_data_rich_relation(
-            'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(split),
+            'data/WebQSP/relation_retrieval/bi_encoder/WebQSP.{}.goldenRelation.json'.format(split),
             'data/common_data/freebase_relations_filtered.json',
             'data/common_data/fb_relation_rich_map.json',
-            'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.sampled.tsv'.format(split)
+            'data/WebQSP/relation_retrieval/bi_encoder/WebQSP.{}.sampled.tsv'.format(split)
         )
 
         prepare_2hop_relations(dataset)
@@ -329,27 +329,27 @@ def prepare_2hop_relations(
     dataset
 ):
     if dataset.lower() == 'webqsp':
-        if not os.path.exists('data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/unique_entity_ids.json'):
+        if not os.path.exists('data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/unique_entity_ids.json'):
             print('Collecting unique entity')
             get_unique_entity_ids(
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_train_rng_el.json',
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_train_rng_el.json',
                 None,
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_test_rng_el.json',
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/unique_entity_ids.json'
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_test_rng_el.json',
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/unique_entity_ids.json'
             )
-        if not os.path.exists('data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/entities_2hop_relations.json'):
+        if not os.path.exists('data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/entities_2hop_relations.json'):
             print('quering 2hop relations')
             query_2hop_relations(
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/unique_entity_ids.json',
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/entities_2hop_relations.json'
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/unique_entity_ids.json',
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/entities_2hop_relations.json'
             )
-        if not os.path.exists('data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_test_rng_el_two_hop_relations.json'):
+        if not os.path.exists('data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_test_rng_el_two_hop_relations.json'):
             print('adding two hop relations to original linking results')
             construct_question_2hop_relations(
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_train_rng_el.json',
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_train_rng_el.json',
                 None,
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_test_rng_el.json',
-                'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/entities_2hop_relations.json'
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_test_rng_el.json',
+                'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/entities_2hop_relations.json'
             )
 
 

@@ -1185,13 +1185,13 @@ if __name__=='__main__':
     # print(in_relations, out_relations)
 
     # query_two_hop_relations_gmt(
-    #     'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/unique_entity_ids.json',
-    #     'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/WebQSP.2hopRelations.rng.elq.candEntities.json'
+    #     'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/unique_entity_ids.json',
+    #     'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/WebQSP.2hopRelations.rng.elq.candEntities.json'
     # )
 
     # query_two_hop_relations_gmt(
     #     'data/CWQ/entity_retrieval/disamb_entities/unique_entities.json',
-    #     'data/CWQ/relation_retrieval/bi-encoder/CWQ.2hopRelations.candEntities.json'
+    #     'data/CWQ/relation_retrieval/bi_encoder/CWQ.2hopRelations.candEntities.json'
     # )
 
     """common_data related"""

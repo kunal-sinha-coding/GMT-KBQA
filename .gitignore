@@ -171,8 +171,8 @@ exps_final/
 
 WebQSP/
 bak/
-relation_retrieval/bi-encoder/bak
-relation_retrieval/cross-encoder/bak
+relation_retrieval/bi_encoder/bak
+relation_retrieval/cross_encoder/bak
 relation_retrieval/bak
 generation/bak
 generation/models/bak

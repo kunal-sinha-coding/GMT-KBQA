@@ -591,35 +591,35 @@ if __name__=='__main__':
                 'data/CWQ/relation_retrieval/bi-encoder/CWQ.{}.goldenRelation.json'.format(args.split),
                 'data/CWQ/relation_retrieval/bi-encoder/vectors/mask_mention/CWQ_{}_questions.pt'.format(args.split),
                 'data/CWQ/relation_retrieval/bi-encoder/index/mask_mention/ep_1_flat.index',
-                'data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ.{}.tsv'.format(args.split),
-                'data/CWQ/relation_retrieval/cross-encoder/mask_mention_1epoch_question_relation/CWQ_{}_id_index_map.json'.format(args.split),
+                'data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.{}.tsv'.format(args.split),
+                'data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ_{}_id_index_map.json'.format(args.split),
                 'data/CWQ/entity_retrieval/disamb_entities/CWQ_merged_{}_disamb_entities.json'.format(args.split),
                 args.split,
                 validation_relations_path='data/CWQ/relation_retrieval/bi-encoder/CWQ.2hopRelations.candEntities.json',
             )
         elif args.dataset.lower() == 'webqsp':
-            # Get data for cross-encoder training and validation
+            # Get data for cross_encoder training and validation
             if args.split in ['train', 'ptrain', 'pdev', 'test']:
                 retrieve_candidate_relations_webqsp(
                     'data/common_data/freebase_relations_filtered.json', # determines what kind of sampled relations will be generated (normal/rich)
                     'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(args.split),
                     'data/WebQSP/relation_retrieval/bi-encoder/vectors/rich_relation_3epochs/WebQSP_{}_ep3_questions.pt'.format(args.split),
                     'data/WebQSP/relation_retrieval/bi-encoder/index/rich_relation_3epochs/ep_3_flat.index',
-                    'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_train_rng_el_two_hop_relations.json' if args.split in ['train', 'ptrain', 'pdev'] else 'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_test_rng_el_two_hop_relations.json',
-                    'data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.{}.tsv'.format(args.split),
-                    'data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP_{}_id_index_map.json'.format(args.split),
+                    'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_train_rng_el_two_hop_relations.json' if args.split in ['train', 'ptrain', 'pdev'] else 'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_test_rng_el_two_hop_relations.json',
+                    'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.{}.tsv'.format(args.split),
+                    'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP_{}_id_index_map.json'.format(args.split),
                     args.split,
-                    validation_relations_path='data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/WebQSP.2hopRelations.rng.elq.candEntities.json',
+                    validation_relations_path='data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/WebQSP.2hopRelations.rng.elq.candEntities.json',
                 )
             
-            # Get data for cross-encoder inference
+            # Get data for cross_encoder inference
             if args.split in ['train_2hop', 'test_2hop']:
                 subsp = 'train' if args.split == 'train_2hop' else 'test'
                 retrieve_cross_encoder_inference_data(
-                    f'data/WebQSP/relation_retrieval/cross-encoder/rng_kbqa_linking_results/webqsp_{subsp}_rng_el_two_hop_relations.json',
+                    f'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_{subsp}_rng_el_two_hop_relations.json',
                     f'data/WebQSP/origin/WebQSP.{subsp}.json',
-                    f'data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP.{args.split}.tsv',
-                    f'data/WebQSP/relation_retrieval/cross-encoder/rich_relation_3epochs_question_relation/WebQSP_{args.split}_id_index_map.json',
+                    f'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.{args.split}.tsv',
+                    f'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP_{args.split}_id_index_map.json',
                 )
 
 
