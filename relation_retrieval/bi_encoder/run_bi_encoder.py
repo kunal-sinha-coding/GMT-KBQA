@@ -17,10 +17,10 @@ from itertools import chain
 import json
 import wandb
 import time
-from consts import full_system_prompt
+from relation_retrieval.bi_encoder.consts import full_system_prompt
 from ragnet.evaluate_ragnet import load_llm_and_tokenizer
 
-from biencoder import BiEncoderModule
+from relation_retrieval.bi_encoder.biencoder import BiEncoderModule
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
 MAX_RETRIES = 3
