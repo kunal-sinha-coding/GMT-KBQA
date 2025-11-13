@@ -531,18 +531,18 @@ if __name__=='__main__':
         if args.dataset.lower() == 'cwq':
             encode_relations(
                 'data/common_data/freebase_relations_filtered.json',
-                'data/CWQ/relation_retrieval/bi-encoder/saved_models/mask_mention/CWQ_ep_1.pt',
-                'data/CWQ/relation_retrieval/bi-encoder/vectors/mask_mention/CWQ_ep_1_relations.pt',
-                add_special_tokens=True, # consistent with bi-encoder training script
-                max_len=32, # consistent with bi-encoder training script
+                'data/CWQ/relation_retrieval/bi_encoder/saved_models/mask_mention/CWQ_ep_1.pt',
+                'data/CWQ/relation_retrieval/bi_encoder/vectors/mask_mention/CWQ_ep_1_relations.pt',
+                add_special_tokens=True, # consistent with bi_encoder training script
+                max_len=32, # consistent with bi_encoder training script
                 batch_size=128,
                 cache_dir=args.cache_dir
             )
         elif args.dataset.lower() == 'webqsp':
             encode_relations(
                 'data/common_data/freebase_richRelations_filtered.json', # depends on `normal relation` or `rich relation` biencoder was trained on
-                'data/WebQSP/relation_retrieval/bi-encoder/saved_models/rich_relation_3epochs/WebQSP_ep_3.pt',
-                'data/WebQSP/relation_retrieval/bi-encoder/vectors/rich_relation_3epochs/WebQSP_ep_3_relations.pt',
+                'data/WebQSP/relation_retrieval/bi_encoder/saved_models/rich_relation_3epochs/WebQSP_ep_3.pt',
+                'data/WebQSP/relation_retrieval/bi_encoder/vectors/rich_relation_3epochs/WebQSP_ep_3_relations.pt',
                 add_special_tokens=False,
                 max_len=60, # consistent with training scripts, e.g.`run_bi_encoder_WebQSP.sh`
                 batch_size=128,
@@ -551,22 +551,22 @@ if __name__=='__main__':
     if action.lower() == 'build_index':
         if args.dataset.lower() == 'cwq':
             build_index(
-                'data/CWQ/relation_retrieval/bi-encoder/index/mask_mention/ep_1_flat.index',
-                'data/CWQ/relation_retrieval/bi-encoder/vectors/mask_mention/CWQ_ep_1_relations.pt'
+                'data/CWQ/relation_retrieval/bi_encoder/index/mask_mention/ep_1_flat.index',
+                'data/CWQ/relation_retrieval/bi_encoder/vectors/mask_mention/CWQ_ep_1_relations.pt'
             )
         elif args.dataset.lower() == 'webqsp':
             build_index(
-                'data/WebQSP/relation_retrieval/bi-encoder/index/rich_relation_3epochs/ep_3_flat.index',
-                'data/WebQSP/relation_retrieval/bi-encoder/vectors/rich_relation_3epochs/WebQSP_ep_3_relations.pt'
+                'data/WebQSP/relation_retrieval/bi_encoder/index/rich_relation_3epochs/ep_3_flat.index',
+                'data/WebQSP/relation_retrieval/bi_encoder/vectors/rich_relation_3epochs/WebQSP_ep_3_relations.pt'
             )
     if action.lower() == 'encode_question':
         if args.dataset.lower() == 'cwq':
             encode_questions(
                 'data/CWQ/origin/ComplexWebQuestions_{}.json'.format(args.split),
                 'data/CWQ/entity_retrieval/disamb_entities/CWQ_merged_{}_disamb_entities.json'.format(args.split),
-                'data/CWQ/relation_retrieval/bi-encoder/saved_models/mask_mention/CWQ_ep_1.pt',
-                'data/CWQ/relation_retrieval/bi-encoder/vectors/mask_mention/CWQ_{}_questions.pt'.format(args.split),
-                max_len=32,  # consistent with bi-encoder training script
+                'data/CWQ/relation_retrieval/bi_encoder/saved_models/mask_mention/CWQ_ep_1.pt',
+                'data/CWQ/relation_retrieval/bi_encoder/vectors/mask_mention/CWQ_{}_questions.pt'.format(args.split),
+                max_len=32,  # consistent with bi_encoder training script
                 cache_dir='bert-base-uncased',
                 add_special_tokens=True,
                 mask_mention=True,
@@ -576,8 +576,8 @@ if __name__=='__main__':
             encode_questions(
                 'data/WebQSP/origin/WebQSP.{}.json'.format(args.split),
                 None,
-                'data/WebQSP/relation_retrieval/bi-encoder/saved_models/rich_relation_3epochs/WebQSP_ep_3.pt',
-                'data/WebQSP/relation_retrieval/bi-encoder/vectors/rich_relation_3epochs/WebQSP_{}_ep3_questions.pt'.format(args.split),
+                'data/WebQSP/relation_retrieval/bi_encoder/saved_models/rich_relation_3epochs/WebQSP_ep_3.pt',
+                'data/WebQSP/relation_retrieval/bi_encoder/vectors/rich_relation_3epochs/WebQSP_{}_ep3_questions.pt'.format(args.split),
                 max_len=60, # consistent with training scripts, e.g.`run_bi_encoder_WebQSP.sh`
                 cache_dir='bert-base-uncased',
                 add_special_tokens=False,
@@ -588,23 +588,23 @@ if __name__=='__main__':
         if args.dataset.lower() == 'cwq':
             retrieve_candidate_relations_cwq(
                 'data/common_data/freebase_relations_filtered.json', 
-                'data/CWQ/relation_retrieval/bi-encoder/CWQ.{}.goldenRelation.json'.format(args.split),
-                'data/CWQ/relation_retrieval/bi-encoder/vectors/mask_mention/CWQ_{}_questions.pt'.format(args.split),
-                'data/CWQ/relation_retrieval/bi-encoder/index/mask_mention/ep_1_flat.index',
+                'data/CWQ/relation_retrieval/bi_encoder/CWQ.{}.goldenRelation.json'.format(args.split),
+                'data/CWQ/relation_retrieval/bi_encoder/vectors/mask_mention/CWQ_{}_questions.pt'.format(args.split),
+                'data/CWQ/relation_retrieval/bi_encoder/index/mask_mention/ep_1_flat.index',
                 'data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.{}.tsv'.format(args.split),
                 'data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ_{}_id_index_map.json'.format(args.split),
                 'data/CWQ/entity_retrieval/disamb_entities/CWQ_merged_{}_disamb_entities.json'.format(args.split),
                 args.split,
-                validation_relations_path='data/CWQ/relation_retrieval/bi-encoder/CWQ.2hopRelations.candEntities.json',
+                validation_relations_path='data/CWQ/relation_retrieval/bi_encoder/CWQ.2hopRelations.candEntities.json',
             )
         elif args.dataset.lower() == 'webqsp':
             # Get data for cross_encoder training and validation
             if args.split in ['train', 'ptrain', 'pdev', 'test']:
                 retrieve_candidate_relations_webqsp(
                     'data/common_data/freebase_relations_filtered.json', # determines what kind of sampled relations will be generated (normal/rich)
-                    'data/WebQSP/relation_retrieval/bi-encoder/WebQSP.{}.goldenRelation.json'.format(args.split),
-                    'data/WebQSP/relation_retrieval/bi-encoder/vectors/rich_relation_3epochs/WebQSP_{}_ep3_questions.pt'.format(args.split),
-                    'data/WebQSP/relation_retrieval/bi-encoder/index/rich_relation_3epochs/ep_3_flat.index',
+                    'data/WebQSP/relation_retrieval/bi_encoder/WebQSP.{}.goldenRelation.json'.format(args.split),
+                    'data/WebQSP/relation_retrieval/bi_encoder/vectors/rich_relation_3epochs/WebQSP_{}_ep3_questions.pt'.format(args.split),
+                    'data/WebQSP/relation_retrieval/bi_encoder/index/rich_relation_3epochs/ep_3_flat.index',
                     'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_train_rng_el_two_hop_relations.json' if args.split in ['train', 'ptrain', 'pdev'] else 'data/WebQSP/relation_retrieval/cross_encoder/rng_kbqa_linking_results/webqsp_test_rng_el_two_hop_relations.json',
                     'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.{}.tsv'.format(args.split),
                     'data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP_{}_id_index_map.json'.format(args.split),
