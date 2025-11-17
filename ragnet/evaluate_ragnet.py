@@ -12,6 +12,8 @@ from itertools import chain
 import json
 import wandb
 import time
+import httpx
+import asyncio
 from relation_retrieval.bi_encoder.run_bi_encoder import full_system_prompt
 
 BLANK_TOKEN = '[BLANK]'
@@ -48,9 +50,40 @@ def evaluate_single(llm_model, llm_tokenizer, question, relations, top_k=2):
     outputs = llm_model.generate(
         **inputs
     )
-    response = llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print(response)
+    normed_sexpr = llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
+    # denormalize_s_expr_new(
+    #     normed_expr, 
+    #     entity_label_map,
+    #     type_label_map,
+    #     rel_label_map,
+    #     train_entity_map,
+    #     surface_index
+    # )
+    #TODO: Convert normed_sexpr into SPARQL query
+    #TODO: Make this asynchronous with semaphore
+    sparql_query = (
+        """
+        SELECT ?river ?riverLabel ?length WHERE {
+        ?river wdt:P31 wd:Q4022;
+            wdt:P30 wd:Q15;
+            wdt:P2043 ?length.
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }
+        }
+        ORDER BY (?length)
+        LIMIT 1
+        """
+    )
+    results = query_database_with_sparql(sparql_query)
     import pdb; pdb.set_trace()
+
+def query_database_with_sparql(sparql_query):
+    url = "https://query.wikidata.org/sparql"
+    headers = {"Accept": "application/sparql-results+json"}
+    with httpx.Client() as client:
+        response = client.get(url, params={"query": sparql_query}, headers=headers)
+        data = response.json()
+        results = [(item["itemLabel"]["value"], item["item"]["value"]) for item in data["results"]["bindings"]]
+        return results
 
     
 def load_llm_and_tokenizer():
