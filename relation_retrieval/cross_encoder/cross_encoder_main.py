@@ -215,6 +215,7 @@ def train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_l
 
         net.train()
         running_loss = 0.0
+        import pdb; pdb.set_trace()
         for it, (seq, attn_masks, token_type_ids, labels, indexes) in enumerate(tqdm(train_loader)):
 
             seq, attn_masks, token_type_ids, labels = \

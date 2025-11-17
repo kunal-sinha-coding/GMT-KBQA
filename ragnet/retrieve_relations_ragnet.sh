@@ -1,10 +1,9 @@
 #!/bin/sh
 set -e # Exit if any command fails
 
-
 # Encode relations using the trained bi_encoder and build index of encoded relations
-python3 relation_retrieval/bi_encoder/build_and_search_index.py encode_relation --dataset WebQSP
-python3 relation_retrieval/bi_encoder/build_and_search_index.py build_index --dataset WebQSP
+#python3 relation_retrieval/bi_encoder/build_and_search_index.py encode_relation --dataset WebQSP
+#python3 relation_retrieval/bi_encoder/build_and_search_index.py build_index --dataset WebQSP
 
 # Check if encoded relation index file exists
 if [ -f "data/WebQSP/relation_retrieval/bi_encoder/index/rich_relation_3epochs/ep_3_flat.index" ]; then
@@ -15,8 +14,8 @@ else
 fi
 
 # Encode questions using the trained bi_encoder and retrieve indexed relations
-python3 relation_retrieval/bi_encoder/build_and_search_index.py encode_question --dataset WebQSP --split test
-python3 relation_retrieval/bi_encoder/build_and_search_index.py retrieve_relations --dataset WebQSP --split test
+#python3 relation_retrieval/bi_encoder/build_and_search_index.py encode_question --dataset WebQSP --split test
+#python3 relation_retrieval/bi_encoder/build_and_search_index.py retrieve_relations --dataset WebQSP --split test
 
 # Check if cross_encoder data file exists
 if [ -f "data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.test.tsv" ]; then
@@ -26,11 +25,22 @@ else
     exit 1
 fi
 
-# Run cross_encoder to rank retrieved relations
-#sh scripts/run_cross_encoder_WebQSP_question_relation.sh predict rich_relation_3epochs_question_relation test WebQSP_ep_3.pt
+# Train cross_encoder
+#sh scripts/run_cross_encoder_WebQSP_question_relation.sh train rich_relation_3epochs_question_relation
+
+# Check if cross_encoder model is saved
+if [ -f "data/WebQSP/relation_retrieval/cross_encoder/saved_models/rich_relation_3epochs_question_relation/WebQSP_ep_3.pt" ]; then
+    echo "Cross-encoder model file exists."
+else
+    echo "Cross-encoder model file not found! Exiting..."
+    exit 1
+fi
+
+# Run cross_encoder inference to rank retrieved relations
+sh scripts/run_cross_encoder_WebQSP_question_relation.sh predict rich_relation_3epochs_question_relation test WebQSP_ep_3.pt
 
 # Check if cross_encoder output file exists
-if [ -f "data/WebQSP/relation_retrieval/cross_encoder/saved_models/rich_relation_3epochs_question_relation/WebQSP_ep_3.pt_test" ]; then
+if [ -f "data/WebQSP/relation_retrieval/cross_encoder/saved_models/rich_relation_3epochs_question_relation/WebQSP_ep_3.pt" ]; then
     echo "Cross-encoder output file exists."
 else
     echo "Cross-encoder output file not found! Exiting..."
@@ -48,3 +58,13 @@ else
     exit 1
 fi
 
+# Preprocess data for generation
+python3 data_process.py merge_all --dataset WebQSP --split test
+
+# Check if data preprocessed for generation exists
+if [ -f "data/WebQSP/generation/merged/WebQSP_test" ]; then
+    echo "Generation data file exists."
+else
+    echo "Generation data file not found! Exiting..."
+    exit 1
+fi
