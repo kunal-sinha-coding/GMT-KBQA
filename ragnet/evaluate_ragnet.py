@@ -43,14 +43,14 @@ def load_data():
     return data
 
 
-def evaluate_single(llm_model, llm_tokenizer, question, relations, top_k=2):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    prompt = f"{full_system_prompt}\nQuestion: {question}\nRelevant relations: {relations[:top_k]}\nLogical form: "
-    inputs = llm_tokenizer(prompt, return_tensors="pt").to(device)
-    outputs = llm_model.generate(
-        **inputs
-    )
-    normed_sexpr = llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
+def evaluate_single(llm_model, llm_tokenizer, question, relations, answer, top_k=2):
+    #device = "cuda" if torch.cuda.is_available() else "cpu"
+    #prompt = f"{full_system_prompt}\nQuestion: {question}\nRelevant relations: {relations[:top_k]}\nLogical form: "
+    #inputs = llm_tokenizer(prompt, return_tensors="pt").to(device)
+    #outputs = llm_model.generate(
+    #    **inputs
+    #)
+    #normed_sexpr = llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
     # denormalize_s_expr_new(
     #     normed_expr, 
     #     entity_label_map,
@@ -74,7 +74,16 @@ def evaluate_single(llm_model, llm_tokenizer, question, relations, top_k=2):
         """
     )
     results = query_database_with_sparql(sparql_query)
-    import pdb; pdb.set_trace()
+    tp, fp, fn = get_retrieval_counts(predictions, groundtruth)
+    return tp, fp, fn
+
+def get_retrieval_counts(predictions, groundtruth)
+    predictions, groundtruth = set(predictions), set(groundtruth)
+    tp = sum(predictions.intersection(groundtruth))
+    fp = len(predictions) - tp
+    fn = len(groundtruth) - tp
+    return tp, fp, fn
+
 
 def query_database_with_sparql(sparql_query):
     url = "https://query.wikidata.org/sparql"
@@ -82,8 +91,12 @@ def query_database_with_sparql(sparql_query):
     with httpx.Client() as client:
         response = client.get(url, params={"query": sparql_query}, headers=headers)
         data = response.json()
-        results = [(item["itemLabel"]["value"], item["item"]["value"]) for item in data["results"]["bindings"]]
-        return results
+        results = [item for item in data["results"]["bindings"]]
+        predictions = []
+        for res in results:
+            label_key = [k for k in res.keys() if "Label" in k][0]
+            predictions.append(res[label_key]["value"])
+        return predictions
 
     
 def load_llm_and_tokenizer():
@@ -113,10 +126,10 @@ def load_llm_and_tokenizer():
 
 
 def main():
-    llm_model, llm_tokenizer = load_llm_and_tokenizer()
+    llm_model, llm_tokenizer = None, None #load_llm_and_tokenizer()
     data = load_data()
     for current_id, example in data.items():
-        evaluate_single(llm_model, llm_tokenizer, example["question"], example["relations"])
+        evaluate_single(llm_model, llm_tokenizer, example["question"], example["relations"], example["answer"])
     
 
 if __name__ == "__main__":
