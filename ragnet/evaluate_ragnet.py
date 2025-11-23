@@ -43,8 +43,9 @@ def load_data():
     return data
 
 
-def evaluate_single(llm_model, llm_tokenizer, question, relations, answer, top_k=2):
+def evaluate_single(llm_model, llm_tokenizer, example, top_k=2):
     #device = "cuda" if torch.cuda.is_available() else "cpu"
+    question, relations, answer = example["question"], example["relations"], example["answer"]
     #prompt = f"{full_system_prompt}\nQuestion: {question}\nRelevant relations: {relations[:top_k]}\nLogical form: "
     #inputs = llm_tokenizer(prompt, return_tensors="pt").to(device)
     #outputs = llm_model.generate(
@@ -73,11 +74,13 @@ def evaluate_single(llm_model, llm_tokenizer, question, relations, answer, top_k
         LIMIT 1
         """
     )
-    results = query_database_with_sparql(sparql_query)
+    import pdb; pdb.set_trace()
+    groundtruth = query_database_with_sparql()
+    predictions = query_database_with_sparql(sparql_query)
     tp, fp, fn = get_retrieval_counts(predictions, groundtruth)
     return tp, fp, fn
 
-def get_retrieval_counts(predictions, groundtruth)
+def get_retrieval_counts(predictions, groundtruth):
     predictions, groundtruth = set(predictions), set(groundtruth)
     tp = sum(predictions.intersection(groundtruth))
     fp = len(predictions) - tp
@@ -129,7 +132,8 @@ def main():
     llm_model, llm_tokenizer = None, None #load_llm_and_tokenizer()
     data = load_data()
     for current_id, example in data.items():
-        evaluate_single(llm_model, llm_tokenizer, example["question"], example["relations"], example["answer"])
+        import pdb; pdb.set_trace()
+        evaluate_single(llm_model, llm_tokenizer, example)
     
 
 if __name__ == "__main__":
