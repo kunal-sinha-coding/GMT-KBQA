@@ -14,6 +14,7 @@ import wandb
 import time
 import httpx
 import asyncio
+from executor.sparql_executor import execute_query_with_odbc
 from relation_retrieval.bi_encoder.run_bi_encoder import full_system_prompt
 
 BLANK_TOKEN = '[BLANK]'
@@ -74,9 +75,8 @@ def evaluate_single(llm_model, llm_tokenizer, example, top_k=2):
         LIMIT 1
         """
     )
-    import pdb; pdb.set_trace()
-    groundtruth = query_database_with_sparql()
-    predictions = query_database_with_sparql(sparql_query)
+    groundtruth = ["Test river"]
+    predictions = execute_query_with_odbc(sparql_query)
     tp, fp, fn = get_retrieval_counts(predictions, groundtruth)
     return tp, fp, fn
 
