@@ -14,12 +14,14 @@ import wandb
 import time
 import httpx
 import asyncio
+from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
 from relation_retrieval.bi_encoder.run_bi_encoder import full_system_prompt
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
 from executor.logic_form_util import lisp_to_sparql
+from ragnet.utils import limit_concurrency
 
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
@@ -52,30 +54,35 @@ def load_data():
         }
     return data
 
+async def evaluate_all(data, database_info, llm_model, llm_tokenizer):
+    tasks = [
+        evaluate_single(llm_model, llm_tokenizer, example, database_info)
+        for example in data.values()
+    ]
+    results = await tqdm_asyncio.gather(
+        *tasks,
+        desc="Running evaluation",
+    )
+    tp, fp, fn = map(list, zip(*results))
+    return sum(tp), sum(fp), sum(fn)
 
-def evaluate_single(llm_model, llm_tokenizer, example, database_info, top_k=2):
-    #device = "cuda" if torch.cuda.is_available() else "cpu"
+@limit_concurrency()
+async def evaluate_single(llm_model, llm_tokenizer, example, database_info, top_k=2):
+
+    # Generate logical form with LLM
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     question, relations, answer = example["question"], example["relations"], example["answer"]
-    #prompt = f"{full_system_prompt}\nQuestion: {question}\nRelevant relations: {relations[:top_k]}\nLogical form: "
-    #inputs = llm_tokenizer(prompt, return_tensors="pt").to(device)
-    #outputs = llm_model.generate(
-    #    **inputs
-    #)
-    #normed_sexpr = llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
-    normed_expr = "( JOIN [ organization , founder , person ] [ Microsoft ] )"
-    #TODO: Make this asynchronous with semaphore
-    #sparql_query = (
-    #    """
-    #    SELECT ?name WHERE {
-    #	    fb:m.044tg ?p ?o .
-    #        ?o fb:type.object.name ?name .
-    #    }
-    #    LIMIT 10 
-    #    """
-    #)
+    prompt = f"{full_system_prompt}\nQuestion: {question}\nRelevant relations: {relations[:top_k]}\nLogical form: "
+    inputs = llm_tokenizer(prompt, return_tensors="pt").to(device)
+    outputs = llm_model.generate(**inputs)
+    normed_expr = llm_tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    # Convert logical form into SPARQL to query the database
     sparql_query = convert_normed_expr_to_sparql(normed_expr, example["ID"], database_info)
     results = execute_query_with_odbc(sparql_query)
     predictions = [ res.split("/")[-1] for res in results ]
+
+    # Compute evaluation metrics
     tp, fp, fn = get_retrieval_counts(predictions, answer)
     print(f"Retrieval counts: {tp}, {fp}, {fn}")
     return tp, fp, fn
@@ -179,15 +186,10 @@ def load_database_info():
  
 
 def main():
-    llm_model, llm_tokenizer = None, None #load_llm_and_tokenizer()
+    llm_model, llm_tokenizer = load_llm_and_tokenizer()
     data = load_data()
     database_info = load_database_info()
-    total_tp, total_fp, total_fn = 0, 0, 0
-    for current_id, example in data.items():
-        tp, fp, fn = evaluate_single(llm_model, llm_tokenizer, example, database_info)
-        total_tp += tp
-        total_fp += fp
-        total_fn += fn
+    total_tp, total_fp, total_fn = evaluate_all(data, database_info, llm_model, llm_tokenizer)
     print(calculate_retrieval_metrics(total_tp, total_fp, total_fn))
 
 
