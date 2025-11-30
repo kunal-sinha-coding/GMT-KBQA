@@ -29,7 +29,7 @@ MODEL_TYPE_DICT = {
 
 ELQ_SERVICE_URL = "http://210.28.134.34:5688/entity_linking"
 FREEBASE_SPARQL_WRAPPER_URL = "http://210.28.134.34:8890/sparql"
-FREEBASE_ODBC_PORT = "1111"
+FREEBASE_ODBC_PORT = "13001"
 
 def set_seed(args):
     random.seed(args.seed)
