@@ -257,6 +257,7 @@ def execute_normed_s_expr_from_label_maps(normed_expr,
                 denotation = []
             else:
                 sparql_query = lisp_to_sparql(query_expr)
+                import pdb; pdb.set_trace()
                 denotation = execute_query_with_odbc(sparql_query)
                 denotation = [res.replace("http://rdf.freebase.com/ns/",'') for res in denotation]
         except:

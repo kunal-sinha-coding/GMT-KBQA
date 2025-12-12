@@ -68,13 +68,11 @@ def execute_query_with_odbc(query:str) -> List[str]:
         with odbc_conn.cursor() as cursor:
             cursor.execute(query2)
             rows = cursor.fetchall()
+        for row in rows:
+            result_set.add(row[0])
     except Exception as e:
         print(f"Query Execution Failed:\n{query2}\nException: {e}")
-        exit(0)
-    
-    for row in rows:
-        result_set.add(row[0])
-
+        #exit(0)
     return result_set
 
 
