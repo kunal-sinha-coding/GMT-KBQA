@@ -29,7 +29,7 @@ LLM_PAD_TOKEN = '[PAD]'
 MAX_RETRIES = 3
 load_dotenv()
 
-LLM_NAME = "meta-llama/Llama-2-7b-chat-hf"
+LLM_NAME = "meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
 RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
 
@@ -128,7 +128,6 @@ async def query_database(normed_expr, example, database_info):
     sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
     results = execute_query_with_odbc(sparql_query)
     predictions = [ res.split("/")[-1] for res in results ]
-    import pdb; pdb.set_trace()
 
     # Compute evaluation metrics and save
     tp, fp, fn = get_retrieval_counts(predictions, answer)
@@ -211,8 +210,10 @@ def load_llm_and_tokenizer():
         LLM_NAME, use_fast=False,
         use_auth_token=llm_token,
     )
-    llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
-    llm_model.resize_token_embeddings(len(llm_tokenizer))
+    #llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
+    #llm_model.resize_token_embeddings(len(llm_tokenizer))
+    llm_tokenizer.pad_token = tokenizer.eos_token
+    llm_model.config.pad_token_id = tokenizer.eos_token_id
     print("LLM tokenizer successfully loaded")
     return llm_model, llm_tokenizer, device
 

@@ -1,0 +1,38 @@
+name: gmtupgrade
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+
+dependencies:
+  - python=3.11
+
+  # Core scientific stack
+  - numpy
+  - pandas
+  - tqdm
+  - requests
+  - nltk
+  - scikit-learn
+  - networkx
+  - glob2
+  - urllib3
+
+  # Deep learning
+  - pytorch
+  - transformers
+  - sentencepiece
+
+  # SPARQL / DB
+  - pyodbc
+  - sparqlwrapper
+
+  # Utilities
+  - pip
+
+  # Pip-only packages
+  - pip:
+      - python-dotenv
+      - wandb
+
