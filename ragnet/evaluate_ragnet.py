@@ -15,7 +15,7 @@ import time
 import asyncio
 from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
-from relation_retrieval.bi_encoder.consts import full_system_prompt
+from ragnet.prompts import system_prompt_v3
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
@@ -68,7 +68,6 @@ async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, ba
             tp, fp, fn = await evaluate_single(
                 llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info
             )
-            print(tp, fp, fn)
             results.append((tp, fp, fn))
         except Exception as error:
             print(f"Error: {error}")
@@ -91,12 +90,18 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     prompts = []
     for example in examples_batch:
         question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
-        prompts.append(f"{full_system_prompt}\nQuestion: {question}\nRelations: {relations[:top_k]}\nLogical form: ")
-    all_normed_expr = get_normed_expr(llm_model, llm_tokenizer, device, stopping_criteria, prompts)
-    
+        try:
+            prompts.append(f"{system_prompt_v3}\nQuestion: {question}\nRelations: {relations[:top_k]}\nLogical form: ")
+        except:
+            import pdb; pdb.set_trace()
+    try:
+        all_normed_expr = get_normed_expr(llm_model, llm_tokenizer, device, stopping_criteria, prompts)
+    except:
+        import pdb; pdb.set_trace()
+
     # Convert logical forms into SPARQL and query the database
     results = await asyncio.gather(*[
-        query_database(all_normed_expr[i], example, database_info)
+        query_database(all_normed_expr[i], example, database_info, top_k)
         for i, example in enumerate(examples_batch)
     ], return_exceptions=True)
     tp, fp, fn = map(list, zip(*results))
@@ -113,30 +118,90 @@ def get_normed_expr(llm_model, llm_tokenizer, device, stopping_criteria, prompts
     decoded_outputs = llm_tokenizer.batch_decode(outputs, skip_special_tokens=True)
     all_normed_expr = []
     for decoded in decoded_outputs:
-        decoded = decoded[ decoded.index("Logical form:") :].strip()
-        s = decoded[ decoded.index("(") : decoded.rfind(")") + 1]
-        s = re.sub(r'([\[\]\(\),])', r' \1 ', s)
-        normed_expr = re.sub(r'\s+', ' ', s).strip()
+        try:
+            normed_expr = post_process_normed_expr(decoded)
+        except:
+            import pdb; pdb.set_trace()
         all_normed_expr.append(normed_expr)
     return all_normed_expr
 
 
-async def query_database(normed_expr, example, database_info):
+def post_process_normed_expr(decoded: str):
+    
+    # Remove fluff
+    decoded = decoded[ decoded.index("Logical form:") :].strip()
+    s = decoded[ decoded.index("(") : decoded.rfind(")") + 1]
+    s = re.sub(r'([\[\]\(\),])', r' \1 ', s)
+    s = re.sub(r'\s+', ' ', s).strip()
+
+    # Get all top level expressions
+    exprs = []
+    depth = 0
+    start = None
+    for i, c in enumerate(s):
+        if c == "(":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif c == ")":
+            depth -= 1
+            if depth == 0 and start is not None:
+                exprs.append(s[start : i + 1].strip())
+                start = None
+    
+    # Merge top levels with OR
+    cleaned = []
+    for e in exprs:
+        e = e.strip()
+        e = e.replace("_", " ") # Replace _ with spaces
+        if e and e not in cleaned:
+            cleaned.append(e)
+    if len(cleaned) == 0:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    inner = "\n    ".join(cleaned)
+    return f"( OR\n    {inner}\n)"
+
+
+async def query_database(normed_expr, example, database_info, top_k):
     
     # Query the database
-    question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"] 
-    sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
-    results = execute_query_with_odbc(sparql_query)
-    predictions = [ res.split("/")[-1] for res in results ]
+    question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
+    gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
+    try:
+        sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
+    except:
+        import pdb; pdb.set_trace()
+    try:
+        results = execute_query_with_odbc(sparql_query)
+    except:
+        import pdb; pdb.set_trace()
+    try:
+        predictions = [ res.split("/")[-1] for res in results ]
+    except:
+        import pdb; pdb.set_trace()
 
     # Compute evaluation metrics and save
-    tp, fp, fn = get_retrieval_counts(predictions, answer)
+    try:
+        tp, fp, fn = get_retrieval_counts(predictions, answer)
+    except:
+        import pdb; pdb.set_trace()
     with OUTPUT_FILE.open("a") as output_file:
         output = f"Question ID: {question_id}"
         output += f"\nTP: {tp}, FP: {fp}, FN: {fn}"
-        output += f"\nQuestion: {question}\nAnswer: {answer}"
-        output += f"\nRelations: {relations}\nPredictions: {predictions}"
-        output_file.write(f"Retrieval counts: {tp}, {fp}, {fn}")
+        try:
+            output += f"\nQuestion: {question}\nRelations: {relations[:top_k]}"
+        except:
+            import pdb; pdb.set_trace()
+        output += f"\nPredicted normed expr: {normed_expr}"
+        output += f"\nPredicted query: {sparql_query}"
+        output += f"\nPredictions: {predictions}"
+        output += f"\nGroundtruth normed expr: {gt_normed_expr}"
+        output += f"\nGroundtruth query: {gt_sparql_query}"
+        output += f"\nAnswer: {answer}\n\n"
+        print(output)
+        output_file.write(output)
     return tp, fp, fn
 
 def convert_normed_expr_to_sparql(normed_expr, question_id, database_info):
@@ -212,8 +277,8 @@ def load_llm_and_tokenizer():
     )
     #llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
     #llm_model.resize_token_embeddings(len(llm_tokenizer))
-    llm_tokenizer.pad_token = tokenizer.eos_token
-    llm_model.config.pad_token_id = tokenizer.eos_token_id
+    llm_tokenizer.pad_token = llm_tokenizer.eos_token
+    llm_model.config.pad_token_id = llm_tokenizer.eos_token_id
     print("LLM tokenizer successfully loaded")
     return llm_model, llm_tokenizer, device
 
@@ -245,6 +310,8 @@ async def main():
     data = load_data()
     database_info = load_database_info()
     print(f"Startup time: {time.time() - start_time}")
+    with open(OUTPUT_FILE, "a") as output_file:
+        output_file.write("\n\n~~ NEW RUN STARTING ~~\n\n")
     with torch.no_grad():
         total_tp, total_fp, total_fn = await evaluate_all(data, database_info, llm_model, llm_tokenizer, device)
     calculate_retrieval_metrics(total_tp, total_fp, total_fn)
