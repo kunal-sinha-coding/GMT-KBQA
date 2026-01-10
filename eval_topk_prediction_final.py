@@ -169,7 +169,6 @@ def denormalize_s_expr_new(normed_expr,
                                         cur_seg = cur_seg.replace(", ",".")
                                     else:
                                         # view as relation
-                                        cur_seg = cur_seg.replace("  ", " ") # KUNAL added this
                                         cur_seg = cur_seg.replace(' , ',',')
                                         cur_seg = cur_seg.replace(',','.')
                                         cur_seg = cur_seg.replace(' ', '_')
