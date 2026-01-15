@@ -27903,3 +27903,2102 @@ WHERE {
 }
 Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
 
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( JOIN ( R [ government , government position held , office position or title ] ) [ James K Polk ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:government_.government_position_held_.office_position_or_title ?x .
+FILTER (?x != ns:m.042f1)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( JOIN ( R [ government , government position held , office position or title ] ) ( JOIN ( R [ people , person , profession ] ) [ James K Polk ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:m.060d2 ?x0 .
+?x0 ns:government_.government_position_held_.office_position_or_title ?x .
+FILTER (?x != ns:m.042f1)
+FILTER (?x != ?x0)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( FILTER ( JOIN ( R [ location , country , official language ] ) [ Jamaica ] ) ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location_.country_.official_language ?x0 .
+ns:m.03_r3 ns:location_.country_.languages_spoken ?x1 .
+FILTER (?x != ns:m.03_r3)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( JOIN ( R [ government , government position held , office position or title ] ) [ James K. Polk ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:government_.government_position_held_.office_position_or_title ?x .
+FILTER (?x != ns:m.042f1)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ Jamarcus Russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x .
+FILTER (?x != ns:m.06c97)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+
+
+~~ NEW RUN STARTING ~~
+
+
+
+~~ NEW RUN STARTING ~~
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( JOIN ( R [ language , human language , main country ] ) [ jamaican ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0j3c70b ns:language_.human_language_.main_country ?x .
+FILTER (?x != ns:m.0j3c70b)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( OR ( JOIN ( R [ people.person.profession ] ) [ James K. Polk ] ) ( JOIN ( R [ government.politician.government positions held ] ) [ James K. Polk ] ) ( JOIN ( R [ government.government position held.basic title ] ) [ James K. Polk ] ) ( JOIN ( R [ government.government position held.office position or title ] ) [ James K. Polk ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:people.person.profession ?x0 .
+ns:m.042f1 ns:government.politician.government ?x1 .
+ns:m.042f1 ns:m.060d2 ?x2 .
+ns:m.042f1 ns:government.government ?x3 .
+FILTER (?x != ns:m.042f1)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-8
+TP: 0, FP: 0, FN: 4
+Question: what else did ben franklin invent
+Relations: ['law.inventor.inventions', 'law.invention.inventor', 'book.author.works_written', 'base.nobelprizes.nobel_prize_winner.nobel_honor', 'book.author.book_editions_published']
+Predicted normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law_.inventor_.inventions ?x .
+FILTER (?x != ns:m.019fz)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.019fz)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law.inventor.inventions ?x .
+}
+
+Answer: ['m.0135nr', 'm.013cqs', 'm.01zh8g', 'm.029mmz']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( OR ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ( JOIN ( R [ people , marriage , spouse ] ) [ Richard Nixon ] ) ( JOIN ( R [ people , marriage , type of union ] ) [ Richard Nixon ] ) ( JOIN ( R [ people , marriage , to ] ) [ Richard Nixon ] ) ( JOIN ( R [ people , marriage , from ] ) [ Richard Nixon ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x0 .
+ns:m.06c97 ns:m.0hgl0jr ?x1 .
+ns:m.06c97 ns:m.0hgl0jr ?x2 .
+ns:m.06c97 ns:m.07ds05 ?x3 .
+ns:m.06c97 ns:people_.marriage_.from ?x4 .
+FILTER (?x != ns:m.06c97)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+FILTER (?x != ?x4)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+Question ID: WebQTest-12
+TP: 0, FP: 0, FN: 3
+Question: who is governor of ohio 2011
+Relations: ['government.government_position_held.office_holder', 'government.government_position_held.to', 'government.government_position_held.from', 'government.government_position_held.basic_title', 'government.governmental_jurisdiction.governing_officials']
+Predicted normed expr: ( JOIN ( R [ government , government position held , office holder ] ) [ 2011 , ohio , governor ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+2011_.ohio_.governor ns:government_.government_position_held_.office_holder ?x .
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , government position held , office holder ] ) ( TC ( AND ( JOIN [ government , government position held , basic title ] [ Governor ] ) ( JOIN ( R [ government , governmental jurisdiction , governing officials ] ) [ Ohio ] ) ) [ government , government position held , from ] 2011 ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.05kkh)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government.governmental_jurisdiction.governing_officials ?y .
+?y ns:government.government_position_held.office_holder ?x .
+?y ns:government.government_position_held.basic_title ns:m.0fkvn .
+FILTER(NOT EXISTS {?y ns:government.government_position_held.from ?sk0} || 
+EXISTS {?y ns:government.government_position_held.from ?sk1 . 
+FILTER(xsd:datetime(?sk1) <= "2011-12-31"^^xsd:dateTime) })
+FILTER(NOT EXISTS {?y ns:government.government_position_held.to ?sk2} || 
+EXISTS {?y ns:government.government_position_held.to ?sk3 . 
+FILTER(xsd:datetime(?sk3) >= "2011-01-01"^^xsd:dateTime) })
+}
+
+Answer: ['m.02zzm_', 'm.0340r0', 'm.039rqy']
+
+Question ID: WebQTest-13
+TP: 0, FP: 0, FN: 1
+Question: who was vice president after kennedy died
+Relations: ['government.us_president.vice_president', 'government.us_vice_president.to_president', 'government.government_position_held.office_position_or_title', 'people.deceased_person.place_of_death', 'people.deceased_person.cause_of_death']
+Predicted normed expr: ( JOIN ( R [ people , deceased person , cause of death ] ) ( JOIN ( R [ government , government position held , office position or title ] ) ( JOIN ( R [ government , us president , vice president ] ) ( JOIN ( R [ government , us vice president , to president ] ) [ kennedy ] ) ) ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:m.080v2 ?x0 .
+?x0 ns:m.080v2 ?x1 .
+?x1 ns:m.080v2 ?x2 .
+?x2 ns:m.080v2 ?x .
+FILTER (?x != ns:m.0d3k14)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , us president , vice president ] ) [ John F. Kennedy ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0d3k14)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:government.us_president.vice_president ?x .
+}
+
+Answer: ['m.0f7fy']
+
+Question ID: WebQTest-14
+TP: 0, FP: 0, FN: 2
+Question: where is the fukushima daiichi nuclear plant located
+Relations: ['location.location.containedby', 'location.mailing_address.citytown', 'location.mailing_address.state_province_region', 'common.topic.notable_types', 'organization.organization.headquarters']
+Predicted normed expr: ( JOIN ( R [ location , location , containedby ] ) [ fukushima daiichi nuclear plant ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02vkzy2 ns:location_.location_.containedby ?x .
+FILTER (?x != ns:m.02vkzy2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , location , containedby ] ) [ Fukushima Daiichi Nuclear Power Plant ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.02vkzy2)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02vkzy2 ns:location.location.containedby ?x .
+}
+
+Answer: ['m.03_3d', 'm.03k_g5']
+
+Question ID: WebQTest-16
+TP: 0, FP: 0, FN: 4
+Question: what countries are part of the uk
+Relations: ['common.topic.notable_types', 'organization.organization_membership.member', 'base.aareas.schema.administrative_area.administrative_children', 'base.aareas.schema.administrative_area.administrative_parent', 'base.aareas.schema.administrative_area.administrative_area_type']
+Predicted normed expr: ( JOIN ( JOIN ( R [ base , area , administrative area , administrative children ] ) [ United Kingdom ] ) [ England ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.07ssc ns:base_.area_.administrative_area_.administrative_children ?x0 .
+?x ns:#0 ns:m.02jx1 .
+FILTER (?x != ns:m.02jx1)
+FILTER (?x != ns:m.07ssc)
+FILTER (?x != ?x0)
+}
+Predictions: []
+Groundtruth normed expr: ( AND ( JOIN [ base , aareas , schema , administrative area , administrative area type ] [ UK constituent country ] ) ( JOIN ( R [ base , aareas , schema , administrative area , administrative children ] ) [ United Kingdom ] ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.07ssc)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.07ssc ns:base.aareas.schema.administrative_area.administrative_children ?x .
+?x ns:base.aareas.schema.administrative_area.administrative_area_type ns:m.0hzjlmp .
+}
+
+Answer: ['m.02jx1', 'm.05bcl', 'm.06q1r', 'm.0j5g9']
+
+Question ID: WebQTest-19
+TP: 0, FP: 0, FN: 1
+Question: what is my timezone in louisiana
+Relations: ['location.location.time_zones', 'common.topic.notable_types', 'location.imports_and_exports.exported_to', 'time.time_zone.locations_in_this_time_zone', 'location.mailing_address.citytown']
+Predicted normed expr: ( JOIN ( R [ location , location , time zones ] ) [ Louisiana ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.04ly1 ns:location_.location_.time_zones ?x .
+FILTER (?x != ns:m.04ly1)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , location , time zones ] ) [ Louisiana ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.04ly1)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.04ly1 ns:location.location.time_zones ?x .
+}
+
+Answer: ['m.02fqwt']
+
+Question ID: WebQTest-21
+TP: 0, FP: 0, FN: 3
+Question: who is keyshia cole dad
+Relations: ['people.person.parents', 'people.person.gender', 'people.person.children', 'people.family_member.family', 'people.person.profession']
+Predicted normed expr: ( JOIN ( R [ people , person , profession ] ) [ Keyshia Cole ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01pkxs9 ns:people_.person_.profession ?x .
+FILTER (?x != ns:m.01pkxs9)
+}
+Predictions: []
+Groundtruth normed expr: ( AND ( JOIN [ people , person , gender ] [ Male ] ) ( JOIN ( R [ people , person , parents ] ) [ Keyshia Cole ] ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01pkxs9)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01pkxs9 ns:people.person.parents ?x .
+?x ns:people.person.gender ns:m.05zppz .
+}
+
+Answer: ['m.0n9hj_f', 'm.0n9hk0h', 'm.0wq93rk']
+
+Question ID: WebQTest-22
+TP: 0, FP: 0, FN: 2
+Question: what kind government does egypt have
+Relations: ['location.country.form_of_government', 'common.topic.notable_types', 'location.location.contains', 'government.governmental_jurisdiction.government', 'travel.travel_destination.tourist_attractions']
+Predicted normed expr: ( JOIN ( R [ government , governmental jurisdiction , government ] ) [ Egypt ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02k54 ns:government_.governmental_jurisdiction_.government ?x .
+FILTER (?x != ns:m.02k54)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , form of government ] ) [ Egypt ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.02k54)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02k54 ns:location.country.form_of_government ?x .
+}
+
+Answer: ['m.01dw03', 'm.02tz3y']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( JOIN ( JOIN ( JOIN ( JOIN ( R [ location , country , official language ] ) [ Jamaica ] ) [ English ] ) [ Jamaica ] ) [ English ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location_.country_.official_language ?x0 .
+?x1 ns:#0 ns:m.02jx1 .
+?x2 ns:#1 ns:m.03_r3 .
+?x ns:#2 ns:m.02jx1 .
+FILTER (?x != ns:m.02jx1)
+FILTER (?x != ns:m.03_r3)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( JOIN ( R [ people , person , profession ] ) [ James K Polk ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:m.060d2 ?x .
+FILTER (?x != ns:m.042f1)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people.person.place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-8
+TP: 0, FP: 0, FN: 4
+Question: what else did ben franklin invent
+Relations: ['law.inventor.inventions', 'law.invention.inventor', 'book.author.works_written', 'base.nobelprizes.nobel_prize_winner.nobel_honor', 'book.author.book_editions_published']
+Predicted normed expr: ( JOIN ( JOIN ( JOIN ( JOIN ( JOIN ( R [ law , inventor , inventions ] ) [ ben franklin ] ) [ law , invention , inventor ] ) [ ben franklin ] ) [ book , author , works written ] ) [ ben franklin ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law_.inventor_.inventions ?x0 .
+?x2 ns:#1 ns:m.019fz .
+?x ns:#3 ns:m.019fz .
+FILTER (?x != ns:m.019fz)
+FILTER (?x != ?x0)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.019fz)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law.inventor.inventions ?x .
+}
+
+Answer: ['m.0135nr', 'm.013cqs', 'm.01zh8g', 'm.029mmz']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x .
+FILTER (?x != ns:m.06c97)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+Question ID: WebQTest-12
+TP: 0, FP: 0, FN: 3
+Question: who is governor of ohio 2011
+Relations: ['government.government_position_held.office_holder', 'government.government_position_held.to', 'government.government_position_held.from', 'government.government_position_held.basic_title', 'government.governmental_jurisdiction.governing_officials']
+Predicted normed expr: ( JOIN ( JOIN ( JOIN ( JOIN ( R [ government , government position held , office holder ] ) [ John Kasich ] ) [ to ] ) [ from ] ) [ basic title ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02zzm_ ns:government_.government_position_held_.office_holder ?x0 .
+?x1 ns:#0 ns:m.03ptsq .
+?x2 ns:#1 ns:m.03c_131 .
+?x ns:#2 ns:m.0h5vz3d .
+FILTER (?x != ns:m.03ptsq)
+FILTER (?x != ns:m.0h5vz3d)
+FILTER (?x != ns:m.03c_131)
+FILTER (?x != ns:m.02zzm_)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , government position held , office holder ] ) ( TC ( AND ( JOIN [ government , government position held , basic title ] [ Governor ] ) ( JOIN ( R [ government , governmental jurisdiction , governing officials ] ) [ Ohio ] ) ) [ government , government position held , from ] 2011 ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.05kkh)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government.governmental_jurisdiction.governing_officials ?y .
+?y ns:government.government_position_held.office_holder ?x .
+?y ns:government.government_position_held.basic_title ns:m.0fkvn .
+FILTER(NOT EXISTS {?y ns:government.government_position_held.from ?sk0} || 
+EXISTS {?y ns:government.government_position_held.from ?sk1 . 
+FILTER(xsd:datetime(?sk1) <= "2011-12-31"^^xsd:dateTime) })
+FILTER(NOT EXISTS {?y ns:government.government_position_held.to ?sk2} || 
+EXISTS {?y ns:government.government_position_held.to ?sk3 . 
+FILTER(xsd:datetime(?sk3) >= "2011-01-01"^^xsd:dateTime) })
+}
+
+Answer: ['m.02zzm_', 'm.0340r0', 'm.039rqy']
+
+Question ID: WebQTest-13
+TP: 0, FP: 0, FN: 1
+Question: who was vice president after kennedy died
+Relations: ['government.us_president.vice_president', 'government.us_vice_president.to_president', 'government.government_position_held.office_position_or_title', 'people.deceased_person.place_of_death', 'people.deceased_person.cause_of_death']
+Predicted normed expr: ( FILTER ( JOIN ( R [ people , person , place of death ] ) [ john f kennedy ] ) ( AND ( JOIN ( R [ people , person , cause of death ] ) [ john f kennedy ] ) ( JOIN ( R [ government , government position held , office position or title ] ) [ vice president ] ) ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:m.080v2 ?x0 .
+ns:m.0d3k14 ns:m.080v2 ?x1 .
+ns:m.01ck68d ns:m.080v2 ?x1 .
+FILTER (?x != ns:m.0d3k14)
+FILTER (?x != ns:m.01ck68d)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , us president , vice president ] ) [ John F. Kennedy ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0d3k14)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:government.us_president.vice_president ?x .
+}
+
+Answer: ['m.0f7fy']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( JOIN ( R [ people , ethnicity , languages spoken ] ) [ jamaican ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0j3c70b ns:people_.ethnicity_.languages_spoken ?x .
+FILTER (?x != ns:m.0j3c70b)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( OR ( JOIN ( R [ people.person.profession ] ) [ james k polk ] ) ( JOIN ( R [ government.politician.government positions held ] ) [ james k polk ] ) ( JOIN ( R [ government.government position held.basic title ] ) [ james k polk ] ) ( JOIN ( R [ government.government position held.office position or title ] ) [ james k polk ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:people.person.profession ?x0 .
+ns:m.042f1 ns:government.politician.government ?x1 .
+ns:m.042f1 ns:m.060d2 ?x2 .
+ns:m.042f1 ns:government.government ?x3 .
+FILTER (?x != ns:m.042f1)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( OR ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] ) ( JOIN ( R [ tv , regular tv appearance , character ] ) [ ken barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ ken barlow ] ) ( JOIN ( R [ tv , tv character , appeared in tv program ] ) [ ken barlow ] ) ( JOIN ( R [ tv , regular tv appearance , from ] ) [ ken barlow ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x0 .
+ns:m.015lwh ns:tv_.regular_tv_appearance_.character ?x1 .
+ns:m.015lwh ns:tv_.tv_program_.regular_cast ?x2 .
+ns:m.015lwh ns:tv_.tv_character_.appeared_in_tv_program ?x3 .
+ns:m.015lwh ns:tv_.regular_tv_appearance_.from ?x4 .
+FILTER (?x != ns:m.015lwh)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+FILTER (?x != ?x4)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ george washington carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-8
+TP: 0, FP: 0, FN: 4
+Question: what else did ben franklin invent
+Relations: ['law.inventor.inventions', 'law.invention.inventor', 'book.author.works_written', 'base.nobelprizes.nobel_prize_winner.nobel_honor', 'book.author.book_editions_published']
+Predicted normed expr: ( OR ( JOIN ( R [ law , inventor , inventions ] ) [ ben franklin ] ) ( JOIN ( R [ law , invention , inventor ] ) [ ben franklin ] ) ( JOIN ( R [ book , author , works written ] ) [ ben franklin ] ) ( JOIN ( R [ base , nobelprizes , nobel prize winner , nobel honor ] ) [ ben franklin ] ) ( JOIN ( R [ book , author , book editions published ] ) [ ben franklin ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law_.inventor_.inventions ?x0 .
+ns:m.019fz ns:law_.invention_.inventor ?x1 .
+ns:m.019fz ns:book_.author_.works_written ?x2 .
+ns:m.019fz ns:base_.nobelprizes_.nobel_prize_winner_.nobel_honor ?x3 .
+ns:m.019fz ns:book_.author_.book_editions_published ?x4 .
+FILTER (?x != ns:m.019fz)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+FILTER (?x != ?x4)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.019fz)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law.inventor.inventions ?x .
+}
+
+Answer: ['m.0135nr', 'm.013cqs', 'm.01zh8g', 'm.029mmz']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x .
+FILTER (?x != ns:m.06c97)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( JOIN ( R [ people , ethnicity , languages spoken ] ) [ Jamaican ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0j3c70b ns:people_.ethnicity_.languages_spoken ?x .
+FILTER (?x != ns:m.0j3c70b)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( OR ( JOIN ( R [ location , country , official language ] ) [ Jamaica ] ) ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] ) ( JOIN ( R [ people , ethnicity , languages spoken ] ) [ Jamaican ] ) ( JOIN ( R [ language , human language , main country ] ) [ English ] ) ( JOIN ( R [ language , human language , countries spoken in ] ) [ English ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location_.country_.official_language ?x0 .
+ns:m.03_r3 ns:location_.country_.languages_spoken ?x1 .
+ns:m.0j3c70b ns:people_.ethnicity_.languages_spoken ?x2 .
+ns:m.02jx1 ns:language_.human_language_.main_country ?x3 .
+ns:m.02jx1 ns:language_.human_language_.countries_spoken_in ?x4 .
+FILTER (?x != ns:m.03_r3)
+FILTER (?x != ns:m.0j3c70b)
+FILTER (?x != ns:m.02jx1)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+FILTER (?x != ?x4)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( JOIN ( R [ government , government position held , office position or title ] ) [ James K Polk ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:government_.government_position_held_.office_position_or_title ?x .
+FILTER (?x != ns:m.042f1)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv.regular tv appearance.actor , tv.regular tv appearance.character , tv.tv program.regular cast ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv.regular_tv_appearance.actor_.tv.regular_tv_appearance.character_.tv.tv_program.regular_cast ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-8
+TP: 0, FP: 0, FN: 4
+Question: what else did ben franklin invent
+Relations: ['law.inventor.inventions', 'law.invention.inventor', 'book.author.works_written', 'base.nobelprizes.nobel_prize_winner.nobel_honor', 'book.author.book_editions_published']
+Predicted normed expr: ( OR ( JOIN ( R [ law , inventor , inventions ] ) [ ben franklin ] ) ( JOIN ( R [ law , invention , inventor ] ) [ ben franklin ] ) ( JOIN ( R [ book , author , works written ] ) [ ben franklin ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law_.inventor_.inventions ?x0 .
+ns:m.019fz ns:law_.invention_.inventor ?x1 .
+ns:m.019fz ns:book_.author_.works_written ?x2 .
+FILTER (?x != ns:m.019fz)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.019fz)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law.inventor.inventions ?x .
+}
+
+Answer: ['m.0135nr', 'm.013cqs', 'm.01zh8g', 'm.029mmz']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x .
+FILTER (?x != ns:m.06c97)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+Question ID: WebQTest-12
+TP: 0, FP: 0, FN: 3
+Question: who is governor of ohio 2011
+Relations: ['government.government_position_held.office_holder', 'government.government_position_held.to', 'government.government_position_held.from', 'government.government_position_held.basic_title', 'government.governmental_jurisdiction.governing_officials']
+Predicted normed expr: ( JOIN ( R [ government , government position held , office holder ] ) ( JOIN ( R [ government , government position held , to ] ) ( JOIN ( R [ government , government position held , from ] ) ( JOIN ( R [ government , government position held , basic title ] ) ( JOIN ( R [ government , governmental jurisdiction , governing officials ] ) [ Ohio ] ) ) ) ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government_.governmental_jurisdiction_.governing_officials ?x0 .
+?x0 ns:government_.government_position_held_.basic_title ?x1 .
+?x1 ns:government_.government_position_held_.from ?x2 .
+?x2 ns:government_.government_position_held_.to ?x3 .
+?x3 ns:government_.government_position_held_.office_holder ?x .
+FILTER (?x != ns:m.05kkh)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , government position held , office holder ] ) ( TC ( AND ( JOIN [ government , government position held , basic title ] [ Governor ] ) ( JOIN ( R [ government , governmental jurisdiction , governing officials ] ) [ Ohio ] ) ) [ government , government position held , from ] 2011 ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.05kkh)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government.governmental_jurisdiction.governing_officials ?y .
+?y ns:government.government_position_held.office_holder ?x .
+?y ns:government.government_position_held.basic_title ns:m.0fkvn .
+FILTER(NOT EXISTS {?y ns:government.government_position_held.from ?sk0} || 
+EXISTS {?y ns:government.government_position_held.from ?sk1 . 
+FILTER(xsd:datetime(?sk1) <= "2011-12-31"^^xsd:dateTime) })
+FILTER(NOT EXISTS {?y ns:government.government_position_held.to ?sk2} || 
+EXISTS {?y ns:government.government_position_held.to ?sk3 . 
+FILTER(xsd:datetime(?sk3) >= "2011-01-01"^^xsd:dateTime) })
+}
+
+Answer: ['m.02zzm_', 'm.0340r0', 'm.039rqy']
+
+Question ID: WebQTest-13
+TP: 0, FP: 0, FN: 1
+Question: who was vice president after kennedy died
+Relations: ['government.us_president.vice_president', 'government.us_vice_president.to_president', 'government.government_position_held.office_position_or_title', 'people.deceased_person.place_of_death', 'people.deceased_person.cause_of_death']
+Predicted normed expr: ( OR ( JOIN ( R [ people , deceased person , place of death ] ) [ john f kennedy ] ) ( AND ( JOIN ( R [ government , government position held , office position or title ] ) [ john f kennedy ] ) ( JOIN ( R [ government , us president , vice president ] ) [ john f kennedy ] ) ( JOIN ( R [ government , us vice president , to president ] ) [ john f kennedy ] ) ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:m.080v2 ?x0 .
+ns:m.0d3k14 ns:m.080v2 ?x1 .
+ns:m.0d3k14 ns:m.080v2 ?x1 .
+ns:m.0d3k14 ns:m.080v2 ?x3 .
+FILTER (?x != ns:m.0d3k14)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , us president , vice president ] ) [ John F. Kennedy ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0d3k14)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:government.us_president.vice_president ?x .
+}
+
+Answer: ['m.0f7fy']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( OR ( JOIN ( R [ language , human language , main country ] ) [ Jamaica ] ) ( JOIN ( R [ location , country , official language ] ) [ Jamaica ] ) ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] ) ( JOIN ( R [ people , ethnicity , languages spoken ] ) [ Jamaican ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:language_.human_language_.main_country ?x0 .
+ns:m.03_r3 ns:location_.country_.official_language ?x1 .
+ns:m.03_r3 ns:location_.country_.languages_spoken ?x2 .
+ns:m.0j3c70b ns:people_.ethnicity_.languages_spoken ?x3 .
+FILTER (?x != ns:m.0j3c70b)
+FILTER (?x != ns:m.03_r3)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( OR ( JOIN ( R [ people , person , profession ] ) [ James K. Polk ] ) ( JOIN ( R [ government , politician , government positions held ] ) [ James K. Polk ] ) ( JOIN ( R [ government , government position held , basic title ] ) [ James K. Polk ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:m.060d2 ?x0 .
+ns:m.042f1 ns:m.060d2 ?x1 .
+ns:m.042f1 ns:m.060d2 ?x2 .
+FILTER (?x != ns:m.042f1)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-8
+TP: 0, FP: 0, FN: 4
+Question: what else did ben franklin invent
+Relations: ['law.inventor.inventions', 'law.invention.inventor', 'book.author.works_written', 'base.nobelprizes.nobel_prize_winner.nobel_honor', 'book.author.book_editions_published']
+Predicted normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ ben franklin ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law_.inventor_.inventions ?x .
+FILTER (?x != ns:m.019fz)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.019fz)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law.inventor.inventions ?x .
+}
+
+Answer: ['m.0135nr', 'm.013cqs', 'm.01zh8g', 'm.029mmz']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x .
+FILTER (?x != ns:m.06c97)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+Question ID: WebQTest-12
+TP: 0, FP: 1, FN: 3
+Question: who is governor of ohio 2011
+Relations: ['government.government_position_held.office_holder', 'government.government_position_held.to', 'government.government_position_held.from', 'government.government_position_held.basic_title', 'government.governmental_jurisdiction.governing_officials']
+Predicted normed expr: ( OR ( JOIN ( R [ government , government position held , office holder ] ) [ Ohio ] ) ( JOIN ( R [ government , government position held , to ] ) [ 2011 ] ) ( JOIN ( R [ government , government position held , from ] ) [ 2011 ] ) ( JOIN ( R [ government , government position held , basic title ] ) [ 2011 ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government_.government_position_held_.office_holder ?x0 .
+2011 ns:government_.government_position_held_.to ?x1 .
+2011 ns:government_.government_position_held_.from ?x2 .
+2011 ns:government_.government_position_held_.basic_title ?x3 .
+FILTER (?x != ns:m.05kkh)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: [None]
+Groundtruth normed expr: ( JOIN ( R [ government , government position held , office holder ] ) ( TC ( AND ( JOIN [ government , government position held , basic title ] [ Governor ] ) ( JOIN ( R [ government , governmental jurisdiction , governing officials ] ) [ Ohio ] ) ) [ government , government position held , from ] 2011 ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.05kkh)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government.governmental_jurisdiction.governing_officials ?y .
+?y ns:government.government_position_held.office_holder ?x .
+?y ns:government.government_position_held.basic_title ns:m.0fkvn .
+FILTER(NOT EXISTS {?y ns:government.government_position_held.from ?sk0} || 
+EXISTS {?y ns:government.government_position_held.from ?sk1 . 
+FILTER(xsd:datetime(?sk1) <= "2011-12-31"^^xsd:dateTime) })
+FILTER(NOT EXISTS {?y ns:government.government_position_held.to ?sk2} || 
+EXISTS {?y ns:government.government_position_held.to ?sk3 . 
+FILTER(xsd:datetime(?sk3) >= "2011-01-01"^^xsd:dateTime) })
+}
+
+Answer: ['m.02zzm_', 'm.0340r0', 'm.039rqy']
+
+Question ID: WebQTest-13
+TP: 0, FP: 0, FN: 1
+Question: who was vice president after kennedy died
+Relations: ['government.us_president.vice_president', 'government.us_vice_president.to_president', 'government.government_position_held.office_position_or_title', 'people.deceased_person.place_of_death', 'people.deceased_person.cause_of_death']
+Predicted normed expr: ( OR ( JOIN ( R [ government , government position held , office position or title ] ) [ John F. Kennedy ] ) ( JOIN ( R [ people , deceased person , place of death ] ) [ John F. Kennedy ] ) ( JOIN ( R [ people , deceased person , cause of death ] ) [ John F. Kennedy ] ) ( JOIN ( R [ government , us president , vice president ] ) [ John F. Kennedy ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:m.080v2 ?x0 .
+ns:m.0d3k14 ns:m.080v2 ?x1 .
+ns:m.0d3k14 ns:m.080v2 ?x2 .
+ns:m.0d3k14 ns:m.080v2 ?x3 .
+FILTER (?x != ns:m.0d3k14)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , us president , vice president ] ) [ John F. Kennedy ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0d3k14)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:government.us_president.vice_president ?x .
+}
+
+Answer: ['m.0f7fy']
+
+Question ID: WebQTest-14
+TP: 0, FP: 0, FN: 2
+Question: where is the fukushima daiichi nuclear plant located
+Relations: ['location.location.containedby', 'location.mailing_address.citytown', 'location.mailing_address.state_province_region', 'common.topic.notable_types', 'organization.organization.headquarters']
+Predicted normed expr: ( JOIN ( JOIN ( JOIN ( JOIN ( R [ location , location , containedby ] ) [ Fukushima Daiichi Nuclear Power Plant ] ) [ Tokyo ] ) [ Japan ] ) [ nuclear power plant ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02vkzy2 ns:location_.location_.containedby ?x0 .
+?x1 ns:#0 ns:m.07dfk .
+?x2 ns:#1 ns:m.03_3d .
+?x ns:#2 ns:m.02vkzy2 .
+FILTER (?x != ns:m.07dfk)
+FILTER (?x != ns:m.02vkzy2)
+FILTER (?x != ns:m.03_3d)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , location , containedby ] ) [ Fukushima Daiichi Nuclear Power Plant ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.02vkzy2)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02vkzy2 ns:location.location.containedby ?x .
+}
+
+Answer: ['m.03_3d', 'm.03k_g5']
+
+
+
+~~ NEW RUN STARTING ~~
+
+Question ID: WebQTest-0
+TP: 0, FP: 0, FN: 2
+Question: what does jamaican people speak
+Relations: ['location.country.official_language', 'location.country.languages_spoken', 'people.ethnicity.languages_spoken', 'language.human_language.main_country', 'language.human_language.countries_spoken_in']
+Predicted normed expr: ( JOIN ( R [ location , country , official language ] ) [ jamaican ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0j3c70b ns:location_.country_.official_language ?x .
+FILTER (?x != ns:m.0j3c70b)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , country , languages spoken ] ) [ Jamaica ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03_r3)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03_r3 ns:location.country.languages_spoken ?x .
+}
+
+Answer: ['m.01428y', 'm.04ygk0']
+
+Question ID: WebQTest-1
+TP: 0, FP: 0, FN: 3
+Question: what did james k polk do before he was president
+Relations: ['people.person.profession', 'government.politician.government_positions_held', 'government.government_position_held.basic_title', 'government.government_position_held.office_position_or_title', 'government.government_position_held.from']
+Predicted normed expr: ( JOIN ( R [ people , person , profession ] ) [ James K Polk ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.042f1 ns:m.060d2 ?x .
+FILTER (?x != ns:m.042f1)
+}
+Predictions: []
+Groundtruth normed expr: null
+Groundtruth query: #MANUAL SPARQL
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+  {
+    SELECT ?pFrom 
+    WHERE {
+      ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+      ?y ns:government.government_position_held.office_position_or_title ?x ; 
+         ns:government.government_position_held.basic_title ns:m.060c4 ; # President
+         ns:government.government_position_held.from ?pFrom .
+    }
+  }
+  ns:m.042f1 ns:government.politician.government_positions_held ?y . # James K. Polk
+  ?y ns:government.government_position_held.office_position_or_title ?x ; 
+     ns:government.government_position_held.from ?from .
+  
+  FILTER(xsd:dateTime(?pFrom) - xsd:dateTime(?from) > 0)
+}
+Answer: ['m.02_bcst', 'm.04x_n9q', 'm.0cgqx']
+
+Question ID: WebQTest-3
+TP: 0, FP: 0, FN: 1
+Question: who plays ken barlow in coronation street
+Relations: ['tv.regular_tv_appearance.actor', 'tv.regular_tv_appearance.character', 'tv.tv_program.regular_cast', 'tv.tv_character.appeared_in_tv_program', 'tv.regular_tv_appearance.from']
+Predicted normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) [ ken barlow ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.015lwh ns:tv_.regular_tv_appearance_.actor ?x .
+FILTER (?x != ns:m.015lwh)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ tv , regular tv appearance , actor ] ) ( AND ( JOIN [ tv , regular tv appearance , character ] [ Ken Barlow ] ) ( JOIN ( R [ tv , tv program , regular cast ] ) [ Coronation Street ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.01_2n)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.01_2n ns:tv.tv_program.regular_cast ?y .
+?y ns:tv.regular_tv_appearance.actor ?x .
+?y ns:tv.regular_tv_appearance.character ns:m.015lwh .
+}
+
+Answer: ['m.01j_gs']
+
+Question ID: WebQTest-6
+TP: 0, FP: 0, FN: 1
+Question: where is jamarcus russell from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'music.artist.origin', 'fictional_universe.fictional_character.place_of_birth']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ jamarcus russell ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.0cjcdj)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ JaMarcus Russell ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0cjcdj)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0cjcdj ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.058cm']
+
+Question ID: WebQTest-7
+TP: 0, FP: 0, FN: 1
+Question: where was george washington carver from
+Relations: ['people.person.place_of_birth', 'location.hud_county_place.county', 'common.topic.notable_types', 'location.mailing_address.state_province_region', 'people.person.places_lived']
+Predicted normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people_.person_.place_of_birth ?x .
+FILTER (?x != ns:m.03djm)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , person , place of birth ] ) [ George Washington Carver ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.03djm)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.03djm ns:people.person.place_of_birth ?x .
+}
+
+Answer: ['m.0xhsh']
+
+Question ID: WebQTest-8
+TP: 0, FP: 0, FN: 4
+Question: what else did ben franklin invent
+Relations: ['law.inventor.inventions', 'law.invention.inventor', 'book.author.works_written', 'base.nobelprizes.nobel_prize_winner.nobel_honor', 'book.author.book_editions_published']
+Predicted normed expr: ( JOIN ( JOIN ( JOIN ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] ) [ Benjamin Franklin ] ) [ Benjamin Franklin ] ) [ Benjamin Franklin ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law_.inventor_.inventions ?x0 .
+?x1 ns:#0 ns:m.019fz .
+?x2 ns:#1 ns:m.019fz .
+?x ns:#2 ns:m.019fz .
+FILTER (?x != ns:m.019fz)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ law , inventor , inventions ] ) [ Benjamin Franklin ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.019fz)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.019fz ns:law.inventor.inventions ?x .
+}
+
+Answer: ['m.0135nr', 'm.013cqs', 'm.01zh8g', 'm.029mmz']
+
+Question ID: WebQTest-9
+TP: 0, FP: 0, FN: 1
+Question: who was richard nixon married to
+Relations: ['people.person.spouse_s', 'people.marriage.spouse', 'people.marriage.type_of_union', 'people.marriage.to', 'people.marriage.from']
+Predicted normed expr: ( JOIN ( JOIN ( R [ people , person , spouse s ] ) [ richard nixon ] ) ( JOIN ( R [ people , marriage , type of union ] ) [ richard nixon ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people_.person_.spouse_s ?x0 .
+ns:m.06c97 ns:m.0hgl0jr ?x1 .
+?x ns:#0 ?x1 .
+FILTER (?x != ns:m.06c97)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ people , marriage , spouse ] ) ( AND ( JOIN [ people , marriage , type of union ] [ Marriage ] ) ( JOIN ( R [ people , person , spouse s ] ) [ Richard Nixon ] ) ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.06c97)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.06c97 ns:people.person.spouse_s ?y .
+?y ns:people.marriage.spouse ?x .
+?y ns:people.marriage.type_of_union ns:m.04ztj .
+}
+
+Answer: ['m.023v03']
+
+Question ID: WebQTest-12
+TP: 0, FP: 1, FN: 3
+Question: who is governor of ohio 2011
+Relations: ['government.government_position_held.office_holder', 'government.government_position_held.to', 'government.government_position_held.from', 'government.government_position_held.basic_title', 'government.governmental_jurisdiction.governing_officials']
+Predicted normed expr: ( OR ( JOIN ( R [ government , government position held , office holder ] ) [ governor ] ) ( JOIN ( R [ government , government position held , to ] ) [ ohio ] ) ( JOIN ( R [ government , government position held , from ] ) [ 2011 ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0fkvn ns:government_.government_position_held_.office_holder ?x0 .
+ns:m.05kkh ns:government_.government_position_held_.to ?x1 .
+2011 ns:government_.government_position_held_.from ?x2 .
+FILTER (?x != ns:m.05kkh)
+FILTER (?x != ns:m.0fkvn)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+}
+Predictions: [None]
+Groundtruth normed expr: ( JOIN ( R [ government , government position held , office holder ] ) ( TC ( AND ( JOIN [ government , government position held , basic title ] [ Governor ] ) ( JOIN ( R [ government , governmental jurisdiction , governing officials ] ) [ Ohio ] ) ) [ government , government position held , from ] 2011 ) )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.05kkh)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.05kkh ns:government.governmental_jurisdiction.governing_officials ?y .
+?y ns:government.government_position_held.office_holder ?x .
+?y ns:government.government_position_held.basic_title ns:m.0fkvn .
+FILTER(NOT EXISTS {?y ns:government.government_position_held.from ?sk0} || 
+EXISTS {?y ns:government.government_position_held.from ?sk1 . 
+FILTER(xsd:datetime(?sk1) <= "2011-12-31"^^xsd:dateTime) })
+FILTER(NOT EXISTS {?y ns:government.government_position_held.to ?sk2} || 
+EXISTS {?y ns:government.government_position_held.to ?sk3 . 
+FILTER(xsd:datetime(?sk3) >= "2011-01-01"^^xsd:dateTime) })
+}
+
+Answer: ['m.02zzm_', 'm.0340r0', 'm.039rqy']
+
+Question ID: WebQTest-13
+TP: 0, FP: 0, FN: 1
+Question: who was vice president after kennedy died
+Relations: ['government.us_president.vice_president', 'government.us_vice_president.to_president', 'government.government_position_held.office_position_or_title', 'people.deceased_person.place_of_death', 'people.deceased_person.cause_of_death']
+Predicted normed expr: ( OR ( JOIN ( R [ government , us president , vice president ] ) [ kennedy ] ) ( JOIN ( R [ government , vice president , to president ] ) [ kennedy ] ) ( JOIN ( R [ government , government position held , office position or title ] ) [ kennedy ] ) ( JOIN ( R [ people , deceased person , place of death ] ) [ kennedy ] ) )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:m.080v2 ?x0 .
+ns:m.0d3k14 ns:m.080v2 ?x1 .
+ns:m.0d3k14 ns:m.080v2 ?x2 .
+ns:m.0d3k14 ns:m.080v2 ?x3 .
+FILTER (?x != ns:m.0d3k14)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ government , us president , vice president ] ) [ John F. Kennedy ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.0d3k14)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.0d3k14 ns:government.us_president.vice_president ?x .
+}
+
+Answer: ['m.0f7fy']
+
+Question ID: WebQTest-14
+TP: 0, FP: 0, FN: 2
+Question: where is the fukushima daiichi nuclear plant located
+Relations: ['location.location.containedby', 'location.mailing_address.citytown', 'location.mailing_address.state_province_region', 'common.topic.notable_types', 'organization.organization.headquarters']
+Predicted normed expr: ( JOIN ( JOIN ( JOIN ( JOIN ( JOIN ( R [ common , topic , notable types ] ) [ fukushima daiichi nuclear plant ] ) [ organization , organization , headquarters ] ) [ location , mailing address , state province region ] ) [ location , mailing address , citytown ] ) [ location , location , containedby ] )
+Predicted query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02vkzy2 ns:common_.topic_.notable_types ?x0 .
+?x1 ns:#0 ns:m.02vkzy2 .
+?x2 ns:#1 ns:m.02vkzy2 .
+?x3 ns:#2 ns:m.02vkzy2 .
+FILTER (?x != ns:m.02vkzy2)
+FILTER (?x != ?x0)
+FILTER (?x != ?x1)
+FILTER (?x != ?x2)
+FILTER (?x != ?x3)
+}
+Predictions: []
+Groundtruth normed expr: ( JOIN ( R [ location , location , containedby ] ) [ Fukushima Daiichi Nuclear Power Plant ] )
+Groundtruth query: PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT DISTINCT ?x
+WHERE {
+FILTER (?x != ns:m.02vkzy2)
+FILTER (!isLiteral(?x) OR lang(?x) = '' OR langMatches(lang(?x), 'en'))
+ns:m.02vkzy2 ns:location.location.containedby ?x .
+}
+
+Answer: ['m.03_3d', 'm.03k_g5']
+

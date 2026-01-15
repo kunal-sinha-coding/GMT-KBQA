@@ -160,7 +160,11 @@ def denormalize_s_expr_new(normed_expr,
                                 # try to link entity by FACC1
                                 facc1_cand_entities = surface_index.get_indexrange_entity_el_pro_one_mention(cur_seg_entity,top_k=1)
                                 if facc1_cand_entities:
-                                    cur_seg = list(facc1_cand_entities.keys())[0] # take the first entity
+                                    try:
+                                        cur_seg = list(facc1_cand_entities.keys())[0] # take the first entity
+                                    except Exception as e:
+                                        print(e)
+                                        import pdb; pdb.set_trace()
                                 else:
                                     if is_number(cur_seg):
                                         # check if it is a number
@@ -198,7 +202,11 @@ def denormalize_s_expr_new(normed_expr,
                                     # try facc1 linking
                                     facc1_cand_entities = surface_index.get_indexrange_entity_el_pro_one_mention(cur_seg,top_k=1)
                                     if facc1_cand_entities:
-                                        cur_seg = list(facc1_cand_entities.keys())[0]
+                                        try:
+                                            cur_seg = list(facc1_cand_entities.keys())[0]
+                                        except Exception as e:
+                                            print(e)
+                                            import pdb; pdb.set_trace()
                                        
                                 
             segments.append(cur_seg)
