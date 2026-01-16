@@ -236,9 +236,15 @@ def convert_normed_expr_to_sparql(normed_expr, question_id, database_info):
             database_info["surface_index"]
         )
     except Exception as e:
-        print(e)
+        print(f"ERROR: Failed in denormalizing expression: {e}")
+        return None
     query_expr = denorm_expr.replace("( ", "(").replace(" )", ")")
-    return lisp_to_sparql(query_expr)
+    try:
+        sparql_query = lisp_to_sparql(query_expr)
+    except Exception as e:
+        print(f"ERROR: Failed in converting LISP to SPARQL: {e}")
+        return None
+    return sparql_query
 
 
 def get_retrieval_counts(predictions, groundtruth):
