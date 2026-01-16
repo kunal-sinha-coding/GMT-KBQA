@@ -60,15 +60,15 @@ def load_data():
 async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, batch_size=1):
     all_examples = list(data.values())
     stopping_criteria = StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
-    results = []
+    all_results = []
     for i in tqdm(range(len(all_examples)), desc="Evaluating"):
         start, end = i * batch_size, (i + 1) * batch_size
         examples_batch = all_examples[start:end]
-        results = await evaluate_single(
+        result = await evaluate_single(
             llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info
         )
-        results.append((tp, fp, fn))
-    tp, fp, fn = map(list, zip(*results))
+        all_results.append(result)
+    tp, fp, fn = map(list, zip(*all_results))
     return sum(tp), sum(fp), sum(fn)
 
 class StopOnMultipleWords(StoppingCriteria):
@@ -99,23 +99,26 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     # Compute evaluation metrics and save
     total_tp, total_fp, total_fn = 0, 0, 0
     for i, example in enumerate(examples_batch):
-        tp, fp, fn = get_retrieval_counts(all_predictions[i], example["answer"])
+        question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
+        gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
+        predictions, sparql_query = all_predictions[i]
+        tp, fp, fn = get_retrieval_counts(predictions, answer)
         total_tp += tp
         total_fp += fp
         total_fn += fn
-    with OUTPUT_FILE.open("a") as output_file:
-        output = f"Question ID: {question_id}"
-        output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
-        output += f"\nQuestion: {question}\nRelations: {relations[:top_k]}"
-        output += f"\nPredicted normed expr: {normed_expr}"
-        output += f"\nPredicted query: {sparql_query}"
-        output += f"\nPredictions: {predictions}"
-        output += f"\nGroundtruth normed expr: {gt_normed_expr}"
-        output += f"\nGroundtruth query: {gt_sparql_query}"
-        output += f"\nAnswer: {answer}\n\n"
-        print(output)
-        output_file.write(output)
-    return tp, fp, fn
+        with OUTPUT_FILE.open("a") as output_file:
+            output = f"Question ID: {question_id}"
+            output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
+            output += f"\nQuestion: {question}\nRelations: {relations[:top_k]}"
+            output += f"\nPredicted normed expr: {all_normed_expr[i]}"
+            output += f"\nPredicted query: {sparql_query}"
+            output += f"\nPredictions: {predictions}"
+            output += f"\nGroundtruth normed expr: {gt_normed_expr}"
+            output += f"\nGroundtruth query: {gt_sparql_query}"
+            output += f"\nAnswer: {answer}\n\n"
+            print(output)
+            output_file.write(output)
+    return total_tp, total_fp, total_fn
 
 
 
@@ -204,16 +207,16 @@ async def query_database(normed_expr, example, database_info, top_k):
     gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
     try:
         if not normed_expr:
-            return []
+            return [], None
         sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
     except Exception as e:
         print(e)
-        return []
+        return [], None
     try:
         results = execute_query_with_odbc(sparql_query)
     except Exception as e:
         print(e)
-        return []
+        return [], None
     try:
         predictions = [ 
             res.split("/")[-1] if res else None
@@ -221,8 +224,8 @@ async def query_database(normed_expr, example, database_info, top_k):
         ]
     except Exception as e:
         print(e)
-        return []
-    return predictions
+        return [], None
+    return predictions, sparql_query
 
 def convert_normed_expr_to_sparql(normed_expr, question_id, database_info):
     entity_label_map = {}
