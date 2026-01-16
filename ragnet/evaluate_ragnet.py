@@ -83,26 +83,19 @@ class StopOnMultipleWords(StoppingCriteria):
 
 async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, top_k=5):
 
-    # Generate logical form with LLM
+    # Get predictions
     prompts = []
     for example in examples_batch:
         question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
         prompts.append(f"{system_prompt_lambda_dcs}\nQuestion: {question}\nRelations: {relations[:top_k]}\nLogical form: ")
-    all_normed_expr = get_normed_expr(llm_model, llm_tokenizer, device, stopping_criteria, prompts)
-
-    # Convert logical forms into SPARQL and query the database
-    all_predictions = await asyncio.gather(*[
-        query_database(all_normed_expr[i], example, database_info, top_k)
-        for i, example in enumerate(examples_batch)
-    ])
+    all_normed_expr, all_sparql_queries, all_predictions = get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
     total_tp, total_fp, total_fn = 0, 0, 0
     for i, example in enumerate(examples_batch):
         question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
         gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
-        predictions, sparql_query = all_predictions[i]
-        tp, fp, fn = get_retrieval_counts(predictions, answer)
+        tp, fp, fn = get_retrieval_counts(all_predictions[i], answer)
         total_tp += tp
         total_fp += fp
         total_fn += fn
@@ -111,8 +104,8 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
             output += f"\nQuestion: {question}\nRelations: {relations[:top_k]}"
             output += f"\nPredicted normed expr: {all_normed_expr[i]}"
-            output += f"\nPredicted query: {sparql_query}"
-            output += f"\nPredictions: {predictions}"
+            output += f"\nPredicted query: {all_sparql_queries[i]}"
+            output += f"\nPredictions: {all_predictions[i]}"
             output += f"\nGroundtruth normed expr: {gt_normed_expr}"
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}\n\n"
@@ -122,14 +115,20 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
 
 
 
-def get_normed_expr(llm_model, llm_tokenizer, device, stopping_criteria, prompts):
+def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info):
     inputs = llm_tokenizer(prompts, return_tensors="pt", padding=True).to(device)
     max_retries = 3
     retry_count = 0
     all_normed_expr = [ None for prompt in prompts ]
-    while not all(all_normed_expr) and retry_count < max_retries:
+    all_sparql_queries = [ None for prompt in prompts ]
+    all_predictions = [ None for prompt in prompts ]
+    while ((
+        not all(all_normed_expr)
+        or not all(all_sparql_queries)
+        or not all(all_predictions)
+    ) and retry_count < max_retries):
         if retry_count > 0:
-            print("Retrying...")
+            print(f"Retry count: {retry_count}")
         retry_count += 1
         try:
             outputs = llm_model.generate(
@@ -138,24 +137,43 @@ def get_normed_expr(llm_model, llm_tokenizer, device, stopping_criteria, prompts
                 max_new_tokens=100
             )
         except Exception as e:
-            print(e)
+            print(f"ERROR: Failed in generation: {e}")
             continue
         try:
             decoded_outputs = llm_tokenizer.batch_decode(outputs, skip_special_tokens=True)
         except Exception as e:
-            print(e)
+            print(f"ERROR: Failed in decoding: {e}")
             continue
         for i, decoded in enumerate(decoded_outputs):
             try:
                 normed_expr = post_process_normed_expr(decoded)
                 all_normed_expr[i] = normed_expr
             except Exception as e:
-                print(e)
-                continue
+                print(f"ERROR: Failed post-process normed_expr: {e}")
+                break
             if not normed_expr:
-                print("Normed expr is empty")
-                continue
-    return all_normed_expr
+                print(f"ERROR: Failed post process normed_expr: expression is empty")
+                break
+            try:
+                sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
+                all_sparql_queries[i] = sparql_query
+            except Exception as e:
+                print(f"ERROR: Failed convert to sparql query: {e}")
+                break
+            try:
+                results = execute_query_with_odbc(sparql_query)
+                predictions = [ 
+                    res.split("/")[-1] if res else None
+                    for res in results 
+                ]
+                all_predictions[i] = predictions
+            except Exception as e:
+                print(f"ERROR: Failed execute sparql query: {e}")
+                break
+            if not predictions or not all(predictions):
+                print(f"ERROR: Empty list of predictions. Predictions: {predictions}")
+                break
+    return all_normed_expr, all_sparql_queries, all_predictions
 
 
 def post_process_normed_expr(decoded: str):
@@ -200,32 +218,6 @@ def post_process_normed_expr(decoded: str):
     expr = re.sub(r'\s+', ' ', expr).strip() # collapse multiple spaces
     return expr
 
-
-async def query_database(normed_expr, example, database_info, top_k):
-    # Query the database
-    question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
-    gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
-    try:
-        if not normed_expr:
-            return [], None
-        sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
-    except Exception as e:
-        print(e)
-        return [], None
-    try:
-        results = execute_query_with_odbc(sparql_query)
-    except Exception as e:
-        print(e)
-        return [], None
-    try:
-        predictions = [ 
-            res.split("/")[-1] if res else None
-            for res in results 
-        ]
-    except Exception as e:
-        print(e)
-        return [], None
-    return predictions, sparql_query
 
 def convert_normed_expr_to_sparql(normed_expr, question_id, database_info):
     entity_label_map = {}
