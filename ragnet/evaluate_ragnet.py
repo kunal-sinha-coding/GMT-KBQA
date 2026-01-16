@@ -121,7 +121,7 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
     retry_count = 0
     all_normed_expr = [ None for prompt in prompts ]
     all_sparql_queries = [ None for prompt in prompts ]
-    all_predictions = [ None for prompt in prompts ]
+    all_predictions = [ [] for prompt in prompts ]
     while ((
         not all(all_normed_expr)
         or not all(all_sparql_queries)
@@ -152,7 +152,7 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
                 print(f"ERROR: Failed post-process normed_expr: {e}")
                 break
             if not normed_expr:
-                print(f"ERROR: Failed post process normed_expr: expression is empty")
+                print(f"ERROR: Failed post process normed_expr: expression is . Original: {decoded}")
                 break
             try:
                 sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
