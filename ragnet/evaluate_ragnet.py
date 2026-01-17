@@ -81,7 +81,7 @@ class StopOnMultipleWords(StoppingCriteria):
         text = self.llm_tokenizer.decode(input_ids[0, -self.last_n_tokens:], skip_special_tokens=True).lower()
         return any(word.lower() in text for word in self.stop_words)
 
-async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, top_k=5):
+async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, top_k=2):
 
     # Get predictions
     prompts = []
@@ -134,7 +134,7 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
             outputs = llm_model.generate(
                 **inputs,
                 stopping_criteria=stopping_criteria,
-                max_new_tokens=100
+                max_new_tokens=1000
             )
         except Exception as e:
             print(f"ERROR: Failed in generation: {e}")
@@ -152,7 +152,7 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
                 print(f"ERROR: Failed post-process normed_expr: {e}")
                 break
             if not normed_expr:
-                print(f"ERROR: Failed post process normed_expr: expression is . Original: {decoded}")
+                print(f"ERROR: Failed post process normed_expr. Original: {decoded}")
                 break
             try:
                 sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
