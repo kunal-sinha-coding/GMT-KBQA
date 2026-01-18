@@ -32,6 +32,7 @@ load_dotenv()
 LLM_NAME = "meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
 RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
+ENTITY_DATA_NAME = "data/WebQSP/entity_retrieval/candidate_entities/WebQSP_test_merged_cand_entities_elq_facc1.json"
 
 TRAIN_ENTITY_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_entity_label_map.json"
 CANDIDATE_ENTITY_MAP_NAME = "data/WebQSP/entity_retrieval/disamb_entities/WebQSP_merged_test_disamb_entities.json"
@@ -44,6 +45,8 @@ def load_data():
     data = {}
     with open(RELATIONS_DATA_NAME, "r") as f:
         relations_data = json.load(f)
+    with open(ENTITY_DATA_NAME, "r") as f:
+        entity_data = json.load(f)
     with open(GENERATION_DATA_NAME) as f:
         generation_data_raw = json.loads(f.read())
         generation_data = {
@@ -53,7 +56,8 @@ def load_data():
     for current_id in generation_data:
         data[current_id] = {
             **generation_data[current_id],
-            "relations": relations_data[current_id]
+            "relations": relations_data[current_id],
+            "entities": [ entity["label"] for entity in entity_data[current_id] ]
         }
     return data
 
@@ -86,8 +90,8 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     # Get predictions
     prompts = []
     for example in examples_batch:
-        question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
-        prompts.append(f"{system_prompt_lambda_dcs}\nQuestion: {question}\nRelations: {relations[:top_k]}\nLogical form: ")
+        question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
+        prompts.append(f"{system_prompt_lambda_dcs}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
     all_normed_expr, all_sparql_queries, all_predictions = get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
@@ -102,7 +106,7 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
         with OUTPUT_FILE.open("a") as output_file:
             output = f"Question ID: {question_id}"
             output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
-            output += f"\nQuestion: {question}\nRelations: {relations[:top_k]}"
+            output += f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}"
             output += f"\nPredicted normed expr: {all_normed_expr[i]}"
             output += f"\nPredicted query: {all_sparql_queries[i]}"
             output += f"\nPredictions: {all_predictions[i]}"
@@ -110,6 +114,7 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}\n\n"
             print(output)
+            import pdb; pdb.set_trace()
             output_file.write(output)
     return total_tp, total_fp, total_fn
 
