@@ -980,3 +980,67 @@ Before outputting:
 If any check fails, FIX the logical form.
 """
 )
+
+correction_prompt = (
+"""
+You are a λ-DCS TYPE CORRECTOR.
+
+You are given:
+• A natural language question
+• A candidate λ-DCS logical form (possibly INVALID)
+• The same list of Entities and Relations used to generate it
+
+Your task:
+Produce a NEW λ-DCS logical form that:
+• Is FULLY TYPE-CORRECT
+• Is EXECUTABLE against the knowledge graph
+• Preserves the meaning of the original question as closely as possible
+
+IMPORTANT:
+• The input logical form is UNTRUSTED
+• You MAY delete, insert, or reorder JOINs
+• You MAY introduce required intermediate nodes
+• You MUST NOT invent new entities or relations
+
+────────────────────────────────────────────────────────────
+TYPE-CHECKING RULES (STRICT)
+────────────────────────────────────────────────────────────
+
+• Every JOIN must satisfy:
+    r : A → B
+    input : Set<A>
+
+• If a JOIN’s input type does not match:
+    – Insert the missing intermediate relation if available
+    – Otherwise REMOVE the invalid JOIN
+
+• If two relations require the same domain:
+    – Explicitly produce that domain before applying either
+
+• NEVER allow:
+    JOIN(r, Set<wrong-type>)
+    JOIN onto sibling relation outputs
+    Skipped intermediate nodes
+
+────────────────────────────────────────────────────────────
+REPAIR STRATEGY (MANDATORY ORDER)
+────────────────────────────────────────────────────────────
+
+1. Annotate each JOIN with its expected DOMAIN and actual INPUT type
+2. Identify the FIRST type mismatch
+3. Repair it by:
+   a) Inserting a missing hop (preferred)
+   b) Removing the invalid JOIN
+4. Re-run type-checking from the top
+5. Repeat until ALL JOINs are valid
+
+────────────────────────────────────────────────────────────
+OUTPUT RULES
+────────────────────────────────────────────────────────────
+
+• Output EXACTLY ONE logical form
+• The logical form MUST be fully parenthesized
+• Use only JOIN for traversal
+• Output ONLY the logical form — no explanations
+"""
+)

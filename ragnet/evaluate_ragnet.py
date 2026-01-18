@@ -15,7 +15,7 @@ import time
 import asyncio
 from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
-from ragnet.prompts import system_prompt_lambda_dcs_type
+from ragnet.prompts import system_prompt_lambda_dcs_type, correction_prompt
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
@@ -119,7 +119,6 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     return total_tp, total_fp, total_fn
 
 
-
 def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info):
     inputs = llm_tokenizer(prompts, return_tensors="pt", padding=True).to(device)
     max_retries = 3
@@ -152,7 +151,6 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
         for i, decoded in enumerate(decoded_outputs):
             try:
                 normed_expr = post_process_normed_expr(decoded)
-                all_normed_expr[i] = normed_expr
             except Exception as e:
                 print(f"ERROR: Failed post-process normed_expr: {e}")
                 break
@@ -160,7 +158,27 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
                 print(f"ERROR: Failed post process normed_expr. Original: {decoded}")
                 break
             try:
-                sparql_query = convert_normed_expr_to_sparql(normed_expr, question_id, database_info)
+                full_correction_prompt = f"{correction_prompt}\nLogical form: {normed_expr}\nCorrected logical form: "
+                correction_input = llm_tokenizer(full_correction_prompt, return_tensors="pt", padding=True).to(device)
+                correction_output = llm_model.generate(
+                    **correction_input,
+                    stopping_criteria=stopping_criteria,
+                    max_new_tokens=1000
+                )
+                decoded_corrected = llm_tokenizer.decode(correction_output, skip_special_tokens=True)
+            except Exception as e:
+                print(f"ERROR: Failed in generating correction: {e}")
+            try:
+                normed_expr_corrected = post_process_normed_expr(decoded_corrected)
+                all_normed_expr[i] = normed_expr_corrected
+            except Exception as e:
+                print(f"ERROR: Failed post-process normed_expr_corrected: {e}")
+                break
+            if not normed_expr_corrected:
+                print(f"ERROR: Failed post process normed_expr_corrected: {decoded_corrected}")
+                break
+            try:
+                sparql_query = convert_normed_expr_to_sparql(normed_expr_corrected, question_id, database_info)
                 all_sparql_queries[i] = sparql_query
             except Exception as e:
                 print(f"ERROR: Failed convert to sparql query: {e}")
