@@ -15,7 +15,7 @@ import time
 import asyncio
 from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
-from ragnet.prompts import system_prompt_lambda_dcs
+from ragnet.prompts import system_prompt_lambda_dcs_type
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
@@ -91,7 +91,7 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     prompts = []
     for example in examples_batch:
         question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
-        prompts.append(f"{system_prompt_lambda_dcs}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
+        prompts.append(f"{system_prompt_lambda_dcs_type}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
     all_normed_expr, all_sparql_queries, all_predictions = get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
