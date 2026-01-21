@@ -31,7 +31,7 @@ LLM_PAD_TOKEN = '[PAD]'
 MAX_RETRIES = 3
 load_dotenv()
 
-LLM_MODEL_NAME = "gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+
 GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
 RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
 ENTITY_DATA_NAME = "data/WebQSP/entity_retrieval/candidate_entities/WebQSP_test_merged_cand_entities_elq_facc1.json"
@@ -42,6 +42,18 @@ TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relati
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
 OUTPUT_FILE = Path("ragnet/outputs.txt")
+
+LLM_MODEL_NAME = "gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+LLM_MODEL_PRICING = {
+    "gpt-4.1-mini": {
+        "input": 0.15 / 1_000_000,
+        "output": 0.60 / 1_000_000,
+    },
+    "gpt-5.2-2025-12-11": {
+        "input": 1.75 / 1_000_000,
+        "output": 14.00 / 1_000_000,
+    }
+}
 
 openai_client = AsyncOpenAI()
 
@@ -124,7 +136,7 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     return total_tp, total_fp, total_fn
 
 
-async def get_normed_expr_gpt(prompt: str) -> str:
+async def get_normed_expr_gpt(prompt: str):
     response = await openai_client.chat.completions.create(
         model=LLM_MODEL_NAME,
         messages=[
@@ -133,7 +145,11 @@ async def get_normed_expr_gpt(prompt: str) -> str:
         ],
         temperature=0.0,
     )
-    return response.choices[0].message.content.strip()
+
+    usage = response.usage
+    content = response.choices[0].message.content.strip()
+
+    return content, usage
 
 
 async def get_predictions_gpt(prompts, question_id, database_info):
@@ -141,18 +157,20 @@ async def get_predictions_gpt(prompts, question_id, database_info):
     all_sparql_queries = [None for _ in prompts]
     all_predictions = [[] for _ in prompts]
 
-    normed_expr_tasks = [
-        get_normed_expr_gpt(prompt)
-        for prompt in prompts
-    ]
-    normed_exprs = await asyncio.gather(*normed_expr_tasks)
+    total_input_tokens = 0
+    total_output_tokens = 0
 
-    for i, normed_expr in enumerate(normed_exprs):
+    tasks = [get_normed_expr_gpt(prompt) for prompt in prompts]
+    results = await asyncio.gather(*tasks)
+
+    for i, (normed_expr, usage) in enumerate(results):
         all_normed_expr[i] = normed_expr
+
+        total_input_tokens += usage.prompt_tokens
+        total_output_tokens += usage.completion_tokens
+
         sparql_query = convert_normed_expr_to_sparql(
-            normed_expr,
-            question_id,
-            database_info
+            normed_expr, question_id, database_info
         )
         all_sparql_queries[i] = sparql_query
 
@@ -162,6 +180,17 @@ async def get_predictions_gpt(prompts, question_id, database_info):
             for res in results
         ]
         all_predictions[i] = predictions
+
+    pricing = LLM_MODEL_PRICING[LLM_MODEL_NAME]
+    total_cost = (
+        total_input_tokens * pricing["input"]
+        + total_output_tokens * pricing["output"]
+    )
+
+    print("===== OpenAI Usage =====")
+    print(f"Input tokens:  {total_input_tokens}")
+    print(f"Output tokens: {total_output_tokens}")
+    print(f"Total cost:    ${total_cost:.6f}")
 
     return all_normed_expr, all_sparql_queries, all_predictions
 
