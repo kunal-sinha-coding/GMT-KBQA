@@ -15,7 +15,7 @@ import time
 import asyncio
 from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
-from ragnet.prompts import system_prompt_lambda_dcs_type, correction_prompt_examples
+from ragnet.prompts import system_prompt_lambda_dcs_type, correction_prompt_examples, system_prompt_gpt
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
@@ -23,13 +23,15 @@ from executor.logic_form_util import lisp_to_sparql
 from pathlib import Path
 import time
 import re
+from openai import AsyncOpenAI
+import asyncio
 
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
 MAX_RETRIES = 3
 load_dotenv()
 
-LLM_NAME = "meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+LLM_MODEL_NAME = "gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
 RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
 ENTITY_DATA_NAME = "data/WebQSP/entity_retrieval/candidate_entities/WebQSP_test_merged_cand_entities_elq_facc1.json"
@@ -40,6 +42,8 @@ TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relati
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
 OUTPUT_FILE = Path("ragnet/outputs.txt")
+
+openai_client = AsyncOpenAI()
 
 def load_data():
     data = {}
@@ -63,7 +67,7 @@ def load_data():
 
 async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, batch_size=1):
     all_examples = list(data.values())
-    stopping_criteria = StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
+    stopping_criteria = None #StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
     all_results = []
     for i in tqdm(range(len(all_examples)), desc="Evaluating"):
         start, end = i * batch_size, (i + 1) * batch_size
@@ -91,8 +95,9 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     prompts = []
     for example in examples_batch:
         question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
-        prompts.append(f"{system_prompt_lambda_dcs_type}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
-    all_normed_expr, all_sparql_queries, all_predictions = get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
+        #prompts.append(f"{system_prompt_lambda_dcs_type}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
+        prompts.append(f"{system_prompt_gpt}\nQuestion:{question}\nLogical form: ")
+    all_normed_expr, all_sparql_queries, all_predictions = get_predictions_gpt(prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
     total_tp, total_fp, total_fn = 0, 0, 0
@@ -118,6 +123,49 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output_file.write(output)
     return total_tp, total_fp, total_fn
 
+
+async def get_normed_expr_gpt(prompt: str) -> str:
+    response = await openai_client.chat.completions.create(
+        model=LLM_MODEL_NAME,
+        messages=[
+            {"role": "system", "content": "You are a semantic parser."},
+            {"role": "user", "content": prompt},
+        ],
+        temperature=0.0,
+    )
+    return response.choices[0].message.content.strip()
+
+
+async def get_predictions_gpt(prompts, question_id, database_info):
+    all_normed_expr = [None for _ in prompts]
+    all_sparql_queries = [None for _ in prompts]
+    all_predictions = [[] for _ in prompts]
+
+    normed_expr_tasks = [
+        get_normed_expr_gpt(prompt)
+        for prompt in prompts
+    ]
+    normed_exprs = await asyncio.gather(*normed_expr_tasks)
+
+    for i, normed_expr in enumerate(normed_exprs):
+        all_normed_expr[i] = normed_expr
+        sparql_query = convert_normed_expr_to_sparql(
+            normed_expr,
+            question_id,
+            database_info
+        )
+        all_sparql_queries[i] = sparql_query
+
+        results = execute_query_with_odbc(sparql_query)
+        predictions = [
+            res.split("/")[-1] if res else None
+            for res in results
+        ]
+        all_predictions[i] = predictions
+
+    return all_normed_expr, all_sparql_queries, all_predictions
+
+    
 
 def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info):
     inputs = llm_tokenizer(prompts, return_tensors="pt", padding=True).to(device)
@@ -308,11 +356,11 @@ def load_llm_and_tokenizer():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
     llm_token = os.getenv("HF_AUTH_TOKEN")
-    print(f"Loading in LLM and tokenizer: {LLM_NAME}...")
+    print(f"Loading in LLM and tokenizer: {LLM_MODEL_NAME}...")
     before_mem = torch.cuda.memory_allocated()/1024**2 / 1000
     print(f"Before loading in LLM: {before_mem:.2f} GB of CUDA memory used")
     llm_model = AutoModelForCausalLM.from_pretrained(
-        LLM_NAME,
+        LLM_MODEL_NAME,
         torch_dtype=torch.float16,
         use_auth_token=llm_token,
     ).to(device)
@@ -320,7 +368,7 @@ def load_llm_and_tokenizer():
     print(f"After loading in LLM: {after_mem:.2f} GB of CUDA memory used")
     print(f"Total LLM CUDA memory usage: {(after_mem - before_mem):.2f} GB")
     llm_tokenizer = AutoTokenizer.from_pretrained(
-        LLM_NAME, use_fast=False,
+        LLM_MODEL_NAME, use_fast=False,
         use_auth_token=llm_token,
     )
     #llm_tokenizer.add_special_tokens({"pad_token": LLM_PAD_TOKEN})
@@ -354,9 +402,9 @@ def load_database_info():
 
 async def main():
     start_time = time.time()
-    llm_model, llm_tokenizer, device = load_llm_and_tokenizer()
+    llm_model, llm_tokenizer, device = None, None, None #load_llm_and_tokenizer()
     data = load_data()
-    database_info = load_database_info()
+    database_info = None #load_database_info()
     print(f"Startup time: {time.time() - start_time}")
     with open(OUTPUT_FILE, "a") as output_file:
         output_file.write("\n\n~~ NEW RUN STARTING ~~\n\n")

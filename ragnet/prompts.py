@@ -1254,6 +1254,6 @@ OUTPUT RULES
 
 system_prompt_gpt = (
 """
-Generate a logical form using lambda-DCS style syntax that can be used to answer the following query. Output ONLY the logical form.
-""
+Generate a logical form using lambda-DCS style syntax that can be used to answer the following question. Output ONLY the logical form.
+"""
 )
