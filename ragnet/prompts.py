@@ -1044,3 +1044,216 @@ OUTPUT RULES
 • Output ONLY the logical form — no explanations
 """
 )
+
+correction_prompt_reground = (
+"""
+You are a λ-DCS SEMANTIC RE-GROUNDER.
+
+You are given:
+• A natural language question
+• A candidate λ-DCS logical form (possibly incorrect or ill-typed)
+• A list of candidate Entities
+• A list of candidate Relations
+
+Your task:
+Produce a SINGLE λ-DCS logical form that:
+• Correctly answers the ORIGINAL QUESTION
+• Is EXECUTABLE against the knowledge graph
+• Is TYPE-CORRECT under λ-DCS semantics
+
+The input logical form is ONLY a HINT.
+You are NOT required to preserve its structure, relations, or entities.
+
+────────────────────────────────────────────────────────────
+PRIMARY OBJECTIVE (HIGHEST PRIORITY)
+────────────────────────────────────────────────────────────
+
+MAXIMIZE semantic correctness with respect to the natural language question.
+
+If necessary, you MAY completely discard the input logical form
+and build a new one from scratch.
+
+────────────────────────────────────────────────────────────
+ALLOWED FREEDOMS (EXPLICIT)
+────────────────────────────────────────────────────────────
+
+You MAY:
+• Replace ANY relation with a more semantically appropriate relation
+• Replace ANY entity with a different entity that better matches the question
+• Add or remove JOINs freely
+• Introduce required intermediate nodes
+• Change hop direction if the original is reversed
+• Ignore the original logical form entirely
+
+You MUST:
+• Use ONLY entities from the PROVIDED entity list
+• Use ONLY relations from the PROVIDED relation list
+• Output EXACTLY ONE logical form
+
+────────────────────────────────────────────────────────────
+SEMANTIC GROUNDING RULES
+────────────────────────────────────────────────────────────
+
+• Prefer relations that DIRECTLY answer the question
+• Prefer minimal-hop solutions when possible
+• Choose relations whose DOMAIN and RANGE match the intended semantics
+• Do NOT preserve incorrect structure for the sake of similarity
+
+────────────────────────────────────────────────────────────
+TYPE-CHECKING RULES (NON-NEGOTIABLE)
+────────────────────────────────────────────────────────────
+
+• Every JOIN must satisfy:
+    r : A → B
+    input : Set<A>
+
+• Intermediate nodes MUST be explicit
+• No JOIN may consume an incompatible type
+• Skipped nodes are NEVER allowed
+
+────────────────────────────────────────────────────────────
+CONSTRUCTION STRATEGY (RECOMMENDED)
+────────────────────────────────────────────────────────────
+
+1. Identify the EXPECTED ANSWER TYPE from the question
+2. Identify the MOST DIRECT relation(s) that produce this answer type
+3. Select the BEST entity grounding for the question
+4. Build a MINIMAL, TYPE-CORRECT JOIN structure
+5. Verify that the logical form answers the question
+
+────────────────────────────────────────────────────────────
+OUTPUT RULES
+────────────────────────────────────────────────────────────
+
+• Output EXACTLY ONE fully-parenthesized λ-DCS logical form
+• JOIN is the ONLY traversal operator
+• Do NOT output explanations, comments, or alternatives
+"""
+)
+
+correction_prompt_examples = (
+"""
+You are a λ-DCS TYPE CORRECTOR.
+
+You are given:
+• A natural language question
+• A candidate λ-DCS logical form (possibly INVALID)
+• The same list of Entities and Relations used to generate it
+
+Your task:
+Produce a NEW λ-DCS logical form that:
+• Is FULLY TYPE-CORRECT
+• Is EXECUTABLE against the knowledge graph
+• Preserves the meaning of the original question as closely as possible
+
+IMPORTANT:
+• The input logical form is UNTRUSTED
+• You MAY delete, insert, or reorder JOINs
+• You MAY introduce required intermediate nodes
+• You MUST NOT invent new entities or relations
+
+────────────────────────────────────────────────────────────
+TYPE-CHECKING RULES (STRICT)
+────────────────────────────────────────────────────────────
+
+• Every JOIN must satisfy:
+    r : A → B
+    input : Set<A>
+
+• If a JOIN’s input type does not match:
+    – Insert the missing intermediate relation if available
+    – Otherwise REMOVE the invalid JOIN
+
+• If two relations require the same domain:
+    – Explicitly produce that domain before applying either
+
+• NEVER allow:
+    JOIN(r, Set<wrong-type>)
+    JOIN onto sibling relation outputs
+    Skipped intermediate nodes
+
+────────────────────────────────────────────────────────────
+EXAMPLES
+────────────────────────────────────────────────────────────
+
+POSITIVE EXAMPLES (TYPE-CORRECT REPAIRS)
+
+1. Single-hop replacement
+Question: When was Michael O’Neil born?
+Original logical form:
+( JOIN ( R [ people , person , birthplace ] ) [ Michael O’Neil ] )
+Logical form after type correction:
+( JOIN ( R [ people , person , date_of_birth ] ) [ Michael O’Neil ] )
+
+2. Multi-hop with intermediate insertion
+Question: Who is the mother of the spouse of Laura Adams?
+Original logical form:
+( JOIN ( R [ people , person , parents ] ) [ Laura Adams ] )
+Logical form after type correction:
+( JOIN
+    ( R [ people , person , parents ] )
+    ( JOIN ( R [ people , person , spouse ] ) [ Laura Adams ] )
+)
+
+3. TV appearance multi-hop
+Question: Which actors appeared regularly in *East End Lives*?
+Original logical form:
+( JOIN ( R [ tv , regular_tv_appearance , actor ] ) ( JOIN ( R [ tv , regular_tv_appearance , character ] ) [ East End Lives ] ) )
+Logical form after type correction:
+( JOIN
+    ( R [ tv , regular_tv_appearance , actor ] )
+    ( JOIN ( R [ tv , tv_program , regular_tv_appearances ] ) [ East End Lives ] )
+)
+
+────────────────────────────────────────────────────────────
+NEGATIVE EXAMPLES (INVALID / SHOULD NOT BE PRODUCED)
+
+1. Type mismatch
+( JOIN
+  ( R [ people , person , occupation ] )
+  ( JOIN ( R [ government , politician , government_roles_held ] ) [ Thomas Jefferson ] )
+)
+Problem: Inner JOIN produces `government_role` but outer JOIN expects `person`. Skipped intermediate required node.
+
+2. Skipped node / invalid hop
+( JOIN ( R [ tv , regular_tv_appearance , actor ] ) [ City Streets ] )
+Problem: `actor` relation expects a `regular_tv_appearance` input. Missing intermediate hop.
+
+3. Direct JOIN onto sibling output
+( JOIN
+  ( R [ people , person , parents ] )
+  ( JOIN
+      ( R [ people , person , spouse ] )
+      ( JOIN ( R [ people , person , occupation ] ) [ Laura Adams ] )
+  )
+)
+Problem: Inner-most JOIN returns `occupation` (person → occupation) but outer JOIN expects `person`. Violates "JOIN onto sibling outputs".
+
+────────────────────────────────────────────────────────────
+REPAIR STRATEGY (MANDATORY ORDER)
+────────────────────────────────────────────────────────────
+
+1. Annotate each JOIN with its expected DOMAIN and actual INPUT type
+2. Identify the FIRST type mismatch
+3. Repair it by:
+   a) Inserting a missing hop (preferred)
+   b) Removing the invalid JOIN
+4. Re-run type-checking from the top
+5. Repeat until ALL JOINs are valid
+
+────────────────────────────────────────────────────────────
+OUTPUT RULES
+────────────────────────────────────────────────────────────
+
+• Output EXACTLY ONE logical form
+• The logical form MUST be fully parenthesized
+• Use only JOIN for traversal
+• Output ONLY the logical form — no explanations
+"""
+)
+
+system_prompt_gpt = (
+"""
+Generate a logical form using lambda-DCS style syntax that can be used to answer the following query. Output ONLY the logical form.
+""
+)
