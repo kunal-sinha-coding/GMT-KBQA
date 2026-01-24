@@ -235,6 +235,9 @@ def denormalize_s_expr_new(normed_expr,
                         segments.append(t)
 
     expr = " ".join(segments)
+
+    # Kunal add
+    expr = expr.replace("._", ".").replace("_.", ".")
                 
     return expr
 

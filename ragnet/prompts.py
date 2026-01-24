@@ -863,9 +863,9 @@ tv_program → regular_tv_appearance → actor
 
 VALID:
 ( JOIN
-  ( R [ tv , regular_tv_appearance , actor ] )
+  ( R [ tv , regular tv appearance , actor ] )
   ( JOIN
-    ( R [ tv , tv_program , regular_tv_appearances ] )
+    ( R [ tv , tv program , regular tv appearances ] )
     [ Coronation Street ]
   )
 )
@@ -889,14 +889,14 @@ Examples (INVALID):
 
 ( JOIN
   ( R [ people , person , profession ] )
-  ( JOIN ( R [ government , politician , government_positions_held ] )
-         [ James K. Polk ]
+  ( JOIN ( R [ government , politician , government positions held ] )
+         [ George Washington ]
   )
 )
 
 ( JOIN
-  ( R [ tv , regular_tv_appearance , actor ] )
-  ( JOIN ( R [ tv , regular_tv_appearance , character ] )
+  ( R [ tv , regular tv appearance , actor ] )
+  ( JOIN ( R [ tv , regular tv appearance , character ] )
          [ Coronation Street ]
   )
 )
@@ -937,7 +937,7 @@ Relations:
 ]
 Logical Form:
 ( JOIN
-    ( R [ people , person , date_of_birth ] )
+    ( R [ people , person , date of birth ] )
     [ John Clancy ]
 )
 

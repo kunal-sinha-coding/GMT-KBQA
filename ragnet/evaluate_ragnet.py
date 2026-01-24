@@ -42,8 +42,10 @@ TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relati
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
 OUTPUT_FILE = Path("ragnet/outputs.txt")
+RESULTS_FILE = Path("ragnet/results.jsonl")
 
-LLM_MODEL_NAME = "gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+LLM_MODEL_NAME = "gpt-5-nano" #"gpt-5.2-2025-12-11" 
+#"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 LLM_MODEL_PRICING = {
     "gpt-4.1-mini": {
         "input": 0.15 / 1_000_000,
@@ -52,10 +54,15 @@ LLM_MODEL_PRICING = {
     "gpt-5.2-2025-12-11": {
         "input": 1.75 / 1_000_000,
         "output": 14.00 / 1_000_000,
+    },
+    "gpt-5-nano": {
+        "input": 0.05 / 1_000_000,
+        "output": 0.40 / 1_000_000
     }
 }
-
-openai_client = AsyncOpenAI()
+openai_client = AsyncOpenAI(
+    api_key=os.environ["OPENAI_API_KEY"]
+)
 
 def load_data():
     data = {}
@@ -79,17 +86,17 @@ def load_data():
 
 async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, batch_size=1):
     all_examples = list(data.values())
-    stopping_criteria = None #StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
+    stopping_criteria = StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
     all_results = []
-    for i in tqdm(range(len(all_examples)), desc="Evaluating"):
+    for i in tqdm(range(len(all_examples) // batch_size), desc="Evaluating"):
         start, end = i * batch_size, (i + 1) * batch_size
         examples_batch = all_examples[start:end]
         result = await evaluate_single(
             llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info
         )
         all_results.append(result)
-    tp, fp, fn = map(list, zip(*all_results))
-    return sum(tp), sum(fp), sum(fn)
+    tp, fp, fn, hits1, hits, count = map(list, zip(*all_results))
+    return sum(tp), sum(fp), sum(fn), sum(hits1), sum(hits), sum(count)
 
 class StopOnMultipleWords(StoppingCriteria):
     def __init__(self, stop_words, llm_tokenizer):
@@ -101,28 +108,34 @@ class StopOnMultipleWords(StoppingCriteria):
         text = self.llm_tokenizer.decode(input_ids[0, -self.last_n_tokens:], skip_special_tokens=True).lower()
         return any(word.lower() in text for word in self.stop_words)
 
-async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, top_k=2):
+async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, top_k=5):
 
     # Get predictions
     prompts = []
     for example in examples_batch:
         question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
-        #prompts.append(f"{system_prompt_lambda_dcs_type}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
-        prompts.append(f"{system_prompt_gpt}\nQuestion:{question}\nLogical form: ")
-    all_normed_expr, all_sparql_queries, all_predictions = get_predictions_gpt(prompts, question_id, database_info)
+        prompts.append(f"{system_prompt_lambda_dcs_type}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
+        #prompts.append(f"Question:{question}\nLogical form: ")
+    all_normed_expr, all_sparql_queries, all_predictions = await get_predictions_gpt(prompts, question_id, database_info)
+    #get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
+    #await get_predictions_gpt(prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
-    total_tp, total_fp, total_fn = 0, 0, 0
+    total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = 0, 0, 0, 0, 0, 0
     for i, example in enumerate(examples_batch):
         question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
         gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
-        tp, fp, fn = get_retrieval_counts(all_predictions[i], answer)
+        tp, fp, fn, hits1, hits = get_retrieval_counts(all_predictions[i], answer)
         total_tp += tp
         total_fp += fp
         total_fn += fn
+        total_hits1 += int(hits1)
+        total_hits += int(total_hits)
+        total_count += 1
         with OUTPUT_FILE.open("a") as output_file:
             output = f"Question ID: {question_id}"
             output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
+            output += f"\nHits@1: {hits1}, Hits: {hits}"
             output += f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}"
             output += f"\nPredicted normed expr: {all_normed_expr[i]}"
             output += f"\nPredicted query: {all_sparql_queries[i]}"
@@ -130,26 +143,32 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nGroundtruth normed expr: {gt_normed_expr}"
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}\n\n"
-            print(output)
-            import pdb; pdb.set_trace()
             output_file.write(output)
-    return total_tp, total_fp, total_fn
+    return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count
 
 
 async def get_normed_expr_gpt(prompt: str):
-    response = await openai_client.chat.completions.create(
-        model=LLM_MODEL_NAME,
-        messages=[
-            {"role": "system", "content": "You are a semantic parser."},
-            {"role": "user", "content": prompt},
-        ],
-        temperature=0.0,
-    )
+    content, usage = None, None
+    try:
+        response = await openai_client.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt_gpt},
+                {"role": "user", "content": prompt},
+            ]
+        )
 
-    usage = response.usage
-    content = response.choices[0].message.content.strip()
-
+        usage = response.usage
+        content = response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Failed GPT generation: {e}")
     return content, usage
+
+def post_process_normed_expr_gpt(expr):
+    expr = expr.replace('_', ' ') # remove underscores
+    expr = expr.replace('\n', ' ').replace('\t', ' ')   # remove newlines and tabs
+    expr = re.sub(r'\s+', ' ', expr).strip() # collapse multiple spaces
+    return expr
 
 
 async def get_predictions_gpt(prompts, question_id, database_info):
@@ -163,22 +182,46 @@ async def get_predictions_gpt(prompts, question_id, database_info):
     tasks = [get_normed_expr_gpt(prompt) for prompt in prompts]
     results = await asyncio.gather(*tasks)
 
-    for i, (normed_expr, usage) in enumerate(results):
+    for i, (decoded, usage) in enumerate(results):
+        try:
+            normed_expr = post_process_normed_expr_gpt(decoded)
+        except Exception as e:
+            print(f"Failed to post-process {decoded}: {e}")
+            continue
         all_normed_expr[i] = normed_expr
 
         total_input_tokens += usage.prompt_tokens
         total_output_tokens += usage.completion_tokens
 
-        sparql_query = convert_normed_expr_to_sparql(
-            normed_expr, question_id, database_info
-        )
-        all_sparql_queries[i] = sparql_query
+        if not normed_expr:
+            print(f"No normed expression from decoded: {decoded}")
+            continue
 
-        results = execute_query_with_odbc(sparql_query)
-        predictions = [
-            res.split("/")[-1] if res else None
-            for res in results
-        ]
+        try:
+            sparql_query = convert_normed_expr_to_sparql(
+                normed_expr, question_id, database_info
+            )
+        except Exception as e:
+            print(f"Converting {decoded} to SPARQL query failed: {e}")
+            continue
+        if not sparql_query:
+            print(f"SPARQL query for {decoded} is empty")
+            continue
+        all_sparql_queries[i] = sparql_query
+        
+        try:
+            results = execute_query_with_odbc(sparql_query)
+        except Exception as e:
+            print(f"Executing query {sparql_query} failed: {e}")
+            continue
+        try:
+            predictions = [
+                res.split("/")[-1] if res else None
+                for res in results
+            ]
+        except Exception as e:
+            print(f"Post processing results {res} failed: {e}")
+            continue
         all_predictions[i] = predictions
 
     pricing = LLM_MODEL_PRICING[LLM_MODEL_NAME]
@@ -186,11 +229,7 @@ async def get_predictions_gpt(prompts, question_id, database_info):
         total_input_tokens * pricing["input"]
         + total_output_tokens * pricing["output"]
     )
-
-    print("===== OpenAI Usage =====")
-    print(f"Input tokens:  {total_input_tokens}")
-    print(f"Output tokens: {total_output_tokens}")
-    print(f"Total cost:    ${total_cost:.6f}")
+    # print(total_cost)
 
     return all_normed_expr, all_sparql_queries, all_predictions
 
@@ -233,27 +272,6 @@ def get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts
                 break
             if not normed_expr:
                 print(f"ERROR: Failed post process normed_expr. Original: {decoded}")
-                break
-            try:
-                full_correction_prompt = f"{correction_prompt_examples}\nLogical form: {normed_expr}\nCorrected logical form: "
-                correction_input = llm_tokenizer(full_correction_prompt, return_tensors="pt", padding=True).to(device)
-                correction_output = llm_model.generate(
-                    **correction_input,
-                    stopping_criteria=stopping_criteria,
-                    max_new_tokens=1000
-                )
-                decoded_corrected = llm_tokenizer.batch_decode(correction_output, skip_special_tokens=True)[0]
-            except Exception as e:
-                print(f"ERROR: Failed in generating correction: {e}")
-                break
-            try:
-                normed_expr_corrected = post_process_normed_expr(decoded_corrected)
-                all_normed_expr[i] = normed_expr_corrected
-            except Exception as e:
-                print(f"ERROR: Failed post-process normed_expr_corrected: {e}")
-                break
-            if not normed_expr_corrected:
-                print(f"ERROR: Failed post process normed_expr_corrected: {decoded_corrected}")
                 break
             try:
                 sparql_query = convert_normed_expr_to_sparql(normed_expr_corrected, question_id, database_info)
@@ -353,16 +371,26 @@ def get_retrieval_counts(predictions, groundtruth):
     tp = len(predictions.intersection(groundtruth))
     fp = len(predictions) - tp
     fn = len(groundtruth) - tp
-    return tp, fp, fn
+    hits1, hits = False, False
+    for i, pred in enumerate(predictions):
+        if pred not in groundtruth:
+            continue
+        hits = True
+        if i == 0:
+            hits1 = True
+    return tp, fp, fn, hits1, hits
 
-def calculate_retrieval_metrics(tp, fp, fn):
+def calculate_retrieval_metrics(tp, fp, fn, hits1, hits, count):
     recall = tp / (tp + fn)
     precision = tp / (tp + fp)
     f1 = (2 * precision * recall) / (precision + recall)
+
     return {
         "recall": recall,
         "precision": precision,
-        "f1": f1
+        "f1": f1,
+        "hits@1": hits1 / count,
+        "hits": hits / count
     }
 
 
@@ -431,16 +459,18 @@ def load_database_info():
 
 async def main():
     start_time = time.time()
-    llm_model, llm_tokenizer, device = None, None, None #load_llm_and_tokenizer()
+    llm_model, llm_tokenizer, device = None, None, None#load_llm_and_tokenizer()
     data = load_data()
-    database_info = None #load_database_info()
+    database_info = load_database_info()
     print(f"Startup time: {time.time() - start_time}")
     with open(OUTPUT_FILE, "a") as output_file:
         output_file.write("\n\n~~ NEW RUN STARTING ~~\n\n")
     with torch.no_grad():
-        total_tp, total_fp, total_fn = await evaluate_all(data, database_info, llm_model, llm_tokenizer, device)
-    calculate_retrieval_metrics(total_tp, total_fp, total_fn)
-
+        total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = await evaluate_all(data, database_info, llm_model, llm_tokenizer, device)
+    metrics = calculate_retrieval_metrics(total_tp, total_fp, total_fn, total_hits1, total_hits, total_count)
+    print(metrics)
+    with open(RESULTS_FILE, "a") as results_file:
+        results_file.write(json.dumps(metrics))
 
 if __name__ == "__main__":
     asyncio.run(main())   
