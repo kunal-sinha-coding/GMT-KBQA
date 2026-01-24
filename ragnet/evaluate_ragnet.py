@@ -15,7 +15,7 @@ import time
 import asyncio
 from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
-from ragnet.prompts import system_prompt_lambda_dcs_type, correction_prompt_examples, system_prompt_gpt
+from ragnet.prompts import system_prompt_lambda_dcs_type_v2
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
@@ -114,11 +114,10 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     prompts = []
     for example in examples_batch:
         question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
-        prompts.append(f"{system_prompt_lambda_dcs_type}\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
+        prompts.append(f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: ")
         #prompts.append(f"Question:{question}\nLogical form: ")
     all_normed_expr, all_sparql_queries, all_predictions = await get_predictions_gpt(prompts, question_id, database_info)
     #get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
-    #await get_predictions_gpt(prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
     total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = 0, 0, 0, 0, 0, 0
@@ -153,7 +152,7 @@ async def get_normed_expr_gpt(prompt: str):
         response = await openai_client.chat.completions.create(
             model=LLM_MODEL_NAME,
             messages=[
-                {"role": "system", "content": system_prompt_gpt},
+                {"role": "system", "content": system_prompt_lambda_dcs_type_v2},
                 {"role": "user", "content": prompt},
             ]
         )
@@ -220,7 +219,7 @@ async def get_predictions_gpt(prompts, question_id, database_info):
                 for res in results
             ]
         except Exception as e:
-            print(f"Post processing results {res} failed: {e}")
+            print(f"Post processing results {results} failed: {e}")
             continue
         all_predictions[i] = predictions
 
