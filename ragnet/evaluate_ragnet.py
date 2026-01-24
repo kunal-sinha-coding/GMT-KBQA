@@ -142,6 +142,7 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nGroundtruth normed expr: {gt_normed_expr}"
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}\n\n"
+            print(output)
             output_file.write(output)
     return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count
 
