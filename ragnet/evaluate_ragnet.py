@@ -25,6 +25,7 @@ import time
 import re
 from openai import AsyncOpenAI
 import asyncio
+import tiktoken
 
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
@@ -45,13 +46,12 @@ CANDIDATE_ENTITY_MAP_NAME = "data/WebQSP/entity_retrieval/disamb_entities/WebQSP
 TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relation_label_map.json"
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
-TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings.json")
+TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings.npy")
 OUTPUT_FILE = Path("ragnet/outputs.txt")
 RESULTS_FILE = Path("ragnet/results.jsonl")
 
 LLM_MODEL_NAME = "gpt-5-nano" #"gpt-5.2-2025-12-11" 
 #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
-EMBEDDING_MODEL_NAME = "text-embedding-3-large"
 LLM_MODEL_PRICING = {
     "gpt-4.1-mini": {
         "input": 0.15 / 1_000_000,
@@ -66,6 +66,13 @@ LLM_MODEL_PRICING = {
         "output": 0.40 / 1_000_000
     }
 }
+
+EMBEDDING_MODEL_NAME = "text-embedding-3-small"
+EMBEDDING_BATCHSIZE = 16
+EMBEDDING_PRICING = {
+    "text-embedding-3-small": 0.02 / 1_000_000
+}
+
 openai_client = AsyncOpenAI(
     api_key=os.environ["OPENAI_API_KEY"]
 )
@@ -464,36 +471,47 @@ def load_database_info():
         "surface_index": surface_index
     }
 
-async def get_embedding(text_input: str):
-    response = await openai_client.embeddings.create(
-        model=EMBEDDING_MODEL_NAME,
-        input="Hello world"
-    )
-    embedding = response.data[0].embedding
-    return embedding
+def compute_embedding_cost(texts):
+    enc = tiktoken.encoding_for_model(EMBEDDING_MODEL_NAME)
+    total_tokens = sum(len(enc.encode(t)) for t in texts)
+    cost = (total_tokens / 1_000_000) * EMBEDDING_PRICING[EMBEDDING_MODEL_NAME]
+    return total_tokens, cost
 
-async def get_train_examples():
-    if TRAIN_EMBEDDINGS_FILE.exists():
-        with open(TRAIN_EMBEDDINGS_FILE, "r") as f:
-            return json.loads(f)
+
+embedding_semaphore = asyncio.Semaphore(EMBEDDING_BATCHSIZE)
+async def get_embedding(text_input: str):
+    async with embedding_semaphore:
+        response = await openai_client.embeddings.create(
+            model=EMBEDDING_MODEL_NAME,
+            input=text_input
+        )
+        embedding = response.data[0].embedding
+        return embedding
+
+
+async def get_train_embeddings():
     train_data = load_data(split="train")
-    train_embeddings = {}
-    embedding_tasks = [
-        get_embedding(example["question"])
-        for example in train_data.values()
-    ]
+    if TRAIN_EMBEDDINGS_FILE.exists():
+        return train_data, np.load(TRAIN_EMBEDDINGS_FILE)
+    questions = [ example["question"] for example in train_data.values() ]
+    total_tokens, cost = compute_embedding_cost(questions)
+    print(f"Total tokens: {total_tokens}, Embedding cost: {cost}")
+    embedding_tasks = [ get_embedding(q) for q in questions ]
     embeddings = await asyncio.gather(*embedding_tasks)
-    for i, question_id in enumerate(train_data.keys()):
-        train_embeddings[question_id] = embeddings[i]
-    with open(TRAIN_EMBEDDINGS_FILE, "w") as f:
-        f.write(json.dumps(train_embeddings, indent=4)) 
-    return train_embeddings
+    train_embeddings = [ [] for q in questions ] #np.array((len(questions), len(embeddings[0])))
+    for i, embed in enumerate(embeddings):
+        train_embeddings[i] = embed
+    train_embeddings = np.array(train_embeddings)
+    import pdb; pdb.set_trace()
+    np.save(TRAIN_EMBEDDINGS_FILE, train_embeddings)
+    return train_data, train_embeddings
 
 
 async def main():
     start_time = time.time()
     llm_model, llm_tokenizer, device = None, None, None#load_llm_and_tokenizer()
-    train_
+    train_data, train_embeddings = await get_train_embeddings()
+    import pdb; pdb.set_trace()
     data = load_data(split="test")
     database_info = load_database_info()
     print(f"Startup time: {time.time() - start_time}")
