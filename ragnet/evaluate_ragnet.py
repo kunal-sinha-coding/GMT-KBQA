@@ -32,20 +32,26 @@ MAX_RETRIES = 3
 load_dotenv()
 
 
-GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
-RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
-ENTITY_DATA_NAME = "data/WebQSP/entity_retrieval/candidate_entities/WebQSP_test_merged_cand_entities_elq_facc1.json"
+TEST_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
+TEST_RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
+TEST_ENTITY_DATA_NAME = "data/WebQSP/entity_retrieval/candidate_entities/WebQSP_test_merged_cand_entities_elq_facc1.json"
+
+TRAIN_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_train.json"
+TRAIN_RELATIONS_DATA_NAME = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_train_cand_rels_sorted.json"
+TRAIN_ENTITY_DATA_NAME = "data/WebQSP/entity_retrieval/candidate_entities/WebQSP_train_merged_cand_entities_elq_facc1.json"
 
 TRAIN_ENTITY_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_entity_label_map.json"
 CANDIDATE_ENTITY_MAP_NAME = "data/WebQSP/entity_retrieval/disamb_entities/WebQSP_merged_test_disamb_entities.json"
 TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relation_label_map.json"
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
+TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings.json")
 OUTPUT_FILE = Path("ragnet/outputs.txt")
 RESULTS_FILE = Path("ragnet/results.jsonl")
 
 LLM_MODEL_NAME = "gpt-5-nano" #"gpt-5.2-2025-12-11" 
 #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+EMBEDDING_MODEL_NAME = "text-embedding-3-large"
 LLM_MODEL_PRICING = {
     "gpt-4.1-mini": {
         "input": 0.15 / 1_000_000,
@@ -64,13 +70,16 @@ openai_client = AsyncOpenAI(
     api_key=os.environ["OPENAI_API_KEY"]
 )
 
-def load_data():
+def load_data(split: str):
     data = {}
-    with open(RELATIONS_DATA_NAME, "r") as f:
+    relations_data_name = TRAIN_RELATIONS_DATA_NAME if split == "train" else TEST_RELATIONS_DATA_NAME
+    entity_data_name = TRAIN_ENTITY_DATA_NAME if split == "train" else TEST_ENTITY_DATA_NAME
+    generation_data_name = TRAIN_GENERATION_DATA_NAME if split == "train" else TEST_GENERATION_DATA_NAME
+    with open(relations_data_name, "r") as f:
         relations_data = json.load(f)
-    with open(ENTITY_DATA_NAME, "r") as f:
+    with open(entity_data_name, "r") as f:
         entity_data = json.load(f)
-    with open(GENERATION_DATA_NAME) as f:
+    with open(generation_data_name) as f:
         generation_data_raw = json.loads(f.read())
         generation_data = {
             gen_data['ID']: gen_data
@@ -122,7 +131,7 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     # Compute evaluation metrics and save
     total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = 0, 0, 0, 0, 0, 0
     for i, example in enumerate(examples_batch):
-        question, question_id, relations, answer = example["question"], example["ID"], example["relations"], example["answer"]
+        question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
         gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
         tp, fp, fn, hits1, hits = get_retrieval_counts(all_predictions[i], answer)
         total_tp += tp
@@ -454,12 +463,38 @@ def load_database_info():
         "candidate_entity_map": candidate_entity_map,
         "surface_index": surface_index
     }
- 
+
+async def get_embedding(text_input: str):
+    response = await openai_client.embeddings.create(
+        model=EMBEDDING_MODEL_NAME,
+        input="Hello world"
+    )
+    embedding = response.data[0].embedding
+    return embedding
+
+async def get_train_examples():
+    if TRAIN_EMBEDDINGS_FILE.exists():
+        with open(TRAIN_EMBEDDINGS_FILE, "r") as f:
+            return json.loads(f)
+    train_data = load_data(split="train")
+    train_embeddings = {}
+    embedding_tasks = [
+        get_embedding(example["question"])
+        for example in train_data.values()
+    ]
+    embeddings = await asyncio.gather(*embedding_tasks)
+    for i, question_id in enumerate(train_data.keys()):
+        train_embeddings[question_id] = embeddings[i]
+    with open(TRAIN_EMBEDDINGS_FILE, "w") as f:
+        f.write(json.dumps(train_embeddings, indent=4)) 
+    return train_embeddings
+
 
 async def main():
     start_time = time.time()
     llm_model, llm_tokenizer, device = None, None, None#load_llm_and_tokenizer()
-    data = load_data()
+    train_
+    data = load_data(split="test")
     database_info = load_database_info()
     print(f"Startup time: {time.time() - start_time}")
     with open(OUTPUT_FILE, "a") as output_file:

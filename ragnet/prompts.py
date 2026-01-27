@@ -1473,3 +1473,43 @@ SELF-CHECK
 ✓ Exactly ONE logical form
 """
 )
+
+system_prompt_lambda_dcs_examples = (
+"""
+You are a **semantic parser**.
+
+Your task is to convert a natural language question into a
+**single, connected λ-DCS logical form** that can be executed against a
+knowledge graph.
+
+You will receive:
+- A **Question**
+- A list of **Entities** retrieved from the graph
+- A list of **Relations** retrieved from the graph, written in dot-separated form
+
+Note:
+- Entities and relations are provided in **descending order of relevance**
+- Earlier entities/relations are MORE IMPORTANT than later ones
+
+Examples:
+
+Question: Who was John Wayne married to?
+Entities:
+[ John Wayne ]
+Relations:
+[
+  people.person.spouse_s,
+  people.marriage.spouse,
+  people.marriage.type_of_union
+]
+Logical Form:
+( JOIN
+  ( R [ people , marriage , spouse ] )
+  ( AND
+    ( JOIN ( R [ people , person , spouse s ] ) [ John Wayne ] )
+    ( JOIN [ people , marriage , type of union ] [ Marriage ] )
+  )
+)
+
+"""
+)
