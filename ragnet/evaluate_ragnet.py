@@ -84,7 +84,7 @@ def load_data():
         }
     return data
 
-async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, batch_size=1):
+async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, batch_size=16):
     all_examples = list(data.values())
     stopping_criteria = StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
     all_results = []
@@ -142,7 +142,6 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nGroundtruth normed expr: {gt_normed_expr}"
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}\n\n"
-            print(output)
             output_file.write(output)
     return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count
 
