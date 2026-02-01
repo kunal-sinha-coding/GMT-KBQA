@@ -1514,7 +1514,8 @@ Logical Form:
 """
 )
 
-system_prompt_lambda_dcs_basic = (
+system_prompt_lambda_dcs_basic_priority = (
+
 """
 You are a **semantic parser**.
 
@@ -1532,5 +1533,23 @@ Note:
 - Earlier entities/relations are MORE IMPORTANT than later ones
 
 
+"""
+)
+
+system_prompt_lambda_dcs_basic = (
+"""
+You are a **semantic parser**.
+
+Your task is to convert a natural language question into a
+**single, connected λ-DCS logical form** that can be executed against a
+knowledge graph.
+
+Input:
+- A **Question**
+- A list of **Entities** retrieved from the graph that could be relevant
+- A list of **Relations** retrieved from the graph that could be relevant, written in dot-separated form
+
+Output:
+- A λ-DCS logical form.
 """
 )

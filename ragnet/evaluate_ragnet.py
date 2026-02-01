@@ -102,7 +102,7 @@ def load_data(split: str):
     return data
 
 
-async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, batch_size=16):
+async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, train_data, train_embeddings, batch_size=16):
     all_examples = list(data.values())
     stopping_criteria = StoppingCriteriaList([StopOnMultipleWords(["question", "q:"], llm_tokenizer)])
     all_results = []
@@ -110,7 +110,7 @@ async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, ba
         start, end = i * batch_size, (i + 1) * batch_size
         examples_batch = all_examples[start:end]
         result = await evaluate_single(
-            llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info
+            llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, train_data, train_embeddings
         )
         all_results.append(result)
     tp, fp, fn, hits1, hits, count = map(list, zip(*all_results))
@@ -128,27 +128,28 @@ class StopOnMultipleWords(StoppingCriteria):
         return any(word.lower() in text for word in self.stop_words)
 
 
-async def get_prompts(examples_batch, train_data, train_embeddings, top_k=5):
+async def get_prompts(examples_batch, train_data, train_embeddings, top_k):
     prompts_batch = []
     questions = [ example["question"] for example in examples_batch ]
     similarity_tasks = [ get_similar_train_examples(q, train_data, train_embeddings) for q in questions ]
     similarity_results = await asyncio.gather(*similarity_tasks)
     total_tokens, cost = compute_embedding_cost(questions)
-    print(f"Total tokens: {total_tokens}, cost: {cost}")
-    for example in examples_batch:
-        for train_example in similarity_results:
+    print(f"Embedding cost: {cost}")
+    for i, example in enumerate(examples_batch):
+        prompt = ""
+        for train_example in similarity_results[i]:
             question, question_id, entities, relations, normed_expr = train_example["question"], train_example["ID"], train_example["entities"], train_example["relations"], train_example["normed_sexpr"]
-            prompt += f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: {normed_sexpr}"
-        question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"]
+            prompt += f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: {normed_expr}"
+        question, question_id, entities, relations = example["question"], example["ID"], example["entities"], example["relations"]
         prompt += f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}\nLogical form: "
         prompts_batch.append(prompt)
     return prompts_batch
 
 
-async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, train_data, train_embeddings):
+async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, train_data, train_embeddings, top_k=5):
 
-    prompts_batch = await get_prompts(examples_batch, train_data, train_embeddings)
-    all_normed_expr, all_sparql_queries, all_predictions = await get_predictions_gpt(prompts_batch, question_id, database_info)
+    prompts_batch = await get_prompts(examples_batch, train_data, train_embeddings, top_k)
+    all_normed_expr, all_sparql_queries, all_predictions = await get_predictions_gpt(prompts_batch, examples_batch, database_info)
     #get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
@@ -164,18 +165,18 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
         total_hits += int(total_hits)
         total_count += 1
         with OUTPUT_FILE.open("a") as output_file:
-            output = f"Question ID: {question_id}"
-            output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
-            output += f"\nHits@1: {hits1}, Hits: {hits}"
-            output += f"\nQuestion: {question}\nEntities: {entities[:top_k]}\nRelations: {relations[:top_k]}"
+            output = f"\n\nQuestion ID: {question_id}"
+            output += f"\nPrompts batch: {prompts_batch[i]}"
             output += f"\nPredicted normed expr: {all_normed_expr[i]}"
             output += f"\nPredicted query: {all_sparql_queries[i]}"
             output += f"\nPredictions: {all_predictions[i]}"
             output += f"\nGroundtruth normed expr: {gt_normed_expr}"
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}"
-            output += f"\nPrompt: {prompts_batch[i]}\n\n"
+            output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
+            output += f"\nHits@1: {hits1}, Hits: {hits}"
             output_file.write(output)
+            #print(output)
     return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count
 
 
@@ -186,13 +187,13 @@ def compute_cosine_similarity(v, M):
     return (dot / (M_norm * v_norm)).ravel()
 
 
-async def get_similar_train_examples(question, train_data, train_embeddings, top_k=1):
+async def get_similar_train_examples(question, train_data, train_embeddings, top_k=3):
     embed = await get_embedding(question)
-    test_embedding = np.array(embed).reshape((-1, 1))
+    test_embedding = np.array(embed).reshape((1, -1))
     cosine_sim = compute_cosine_similarity(test_embedding, train_embeddings)
     top_k_indices = np.argpartition(cosine_sim, -top_k)[-top_k:]
     top_k_indices = top_k_indices[np.argsort(cosine_sim[top_k_indices])[::-1]]
-    return [ list(train_data)[idx] for idx in top_k_indices ]
+    return [ list(train_data.values())[idx] for idx in top_k_indices ]
 
 
 async def get_normed_expr_gpt(prompt: str):
@@ -212,13 +213,15 @@ async def get_normed_expr_gpt(prompt: str):
     return content, usage
 
 def post_process_normed_expr_gpt(expr):
+    expr = expr.replace("Logical form:", "") # Remove prefix
     expr = expr.replace('_', ' ') # remove underscores
+    expr = expr.replace(".", " , ") # replace periods
     expr = expr.replace('\n', ' ').replace('\t', ' ')   # remove newlines and tabs
     expr = re.sub(r'\s+', ' ', expr).strip() # collapse multiple spaces
     return expr
 
 
-async def get_predictions_gpt(prompts, question_id, database_info):
+async def get_predictions_gpt(prompts, examples_batch, database_info):
     all_normed_expr = [None for _ in prompts]
     all_sparql_queries = [None for _ in prompts]
     all_predictions = [[] for _ in prompts]
@@ -245,6 +248,7 @@ async def get_predictions_gpt(prompts, question_id, database_info):
             continue
 
         try:
+            question_id = examples_batch[i]["ID"]
             sparql_query = convert_normed_expr_to_sparql(
                 normed_expr, question_id, database_info
             )
@@ -276,7 +280,7 @@ async def get_predictions_gpt(prompts, question_id, database_info):
         total_input_tokens * pricing["input"]
         + total_output_tokens * pricing["output"]
     )
-    # print(total_cost)
+    print(f"LLM generation cost: {total_cost}")
 
     return all_normed_expr, all_sparql_queries, all_predictions
 
@@ -529,12 +533,12 @@ async def get_train_embeddings():
     questions = [ example["question"] for example in train_data.values() ]
     embedding_tasks = [ get_embedding(q) for q in questions ]
     embeddings = await asyncio.gather(*embedding_tasks)
-    train_embeddings = [ [] for q in questions ] #np.array((len(questions), len(embeddings[0])))
+    train_embeddings = [ [] for q in questions ]
     for i, embed in enumerate(embeddings):
         train_embeddings[i] = embed
     train_embeddings = np.array(train_embeddings)
     total_tokens, cost = compute_embedding_cost(questions)
-    print(f"Total tokens: {total_tokens}, Embedding cost: {cost}")
+    print(f"Embedding cost: {cost}")
     np.save(TRAIN_EMBEDDINGS_FILE, train_embeddings)
     return train_data, train_embeddings
 
@@ -542,19 +546,20 @@ async def get_train_embeddings():
 async def main():
     start_time = time.time()
     llm_model, llm_tokenizer, device = None, None, None#load_llm_and_tokenizer()
-    train_data, train_embeddings = await get_train_embeddings()
-    import pdb; pdb.set_trace()
     data = load_data(split="test")
     database_info = load_database_info()
     print(f"Startup time: {time.time() - start_time}")
     with open(OUTPUT_FILE, "a") as output_file:
         output_file.write("\n\n~~ NEW RUN STARTING ~~\n\n")
+    train_data, train_embeddings = await get_train_embeddings()
     with torch.no_grad():
-        total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = await evaluate_all(data, database_info, llm_model, llm_tokenizer, device)
+        total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = await evaluate_all(
+            data, database_info, llm_model, llm_tokenizer, device, train_data, train_embeddings
+        )
     metrics = calculate_retrieval_metrics(total_tp, total_fp, total_fn, total_hits1, total_hits, total_count)
     print(metrics)
     with open(RESULTS_FILE, "a") as results_file:
-        results_file.write(json.dumps(metrics))
+        results_file.write(f"\n{json.dumps(metrics)}")
 
 if __name__ == "__main__":
     asyncio.run(main())   
