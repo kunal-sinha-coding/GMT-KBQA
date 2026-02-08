@@ -126,6 +126,9 @@ def denormalize_s_expr_new(normed_expr,
         elif t==']':
             prev_left_bracket=False
             cur_seg = cur_seg.strip()
+
+            # KUNAL add
+            cur_seg = cur_seg.replace('  , ', ' , ').replace(' ,  ', ' , ')
             
             # find in linear origin map
             processed = False
@@ -164,7 +167,6 @@ def denormalize_s_expr_new(normed_expr,
                                         cur_seg = list(facc1_cand_entities.keys())[0] # take the first entity
                                     except Exception as e:
                                         print(e)
-                                        import pdb; pdb.set_trace()
                                 else:
                                     if is_number(cur_seg):
                                         # check if it is a number
@@ -206,7 +208,6 @@ def denormalize_s_expr_new(normed_expr,
                                             cur_seg = list(facc1_cand_entities.keys())[0]
                                         except Exception as e:
                                             print(e)
-                                            import pdb; pdb.set_trace()
                                        
                                 
             segments.append(cur_seg)

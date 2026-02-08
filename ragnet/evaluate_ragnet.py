@@ -15,7 +15,7 @@ import time
 import asyncio
 from tqdm.asyncio import tqdm_asyncio
 from executor.sparql_executor import execute_query_with_odbc
-from ragnet.prompts import system_prompt_lambda_dcs_type_check
+from ragnet.prompts import system_prompt_lambda_dcs_examples_constrained, system_prompt_lambda_dcs_correction
 from components.utils import load_json
 from entity_retrieval import surface_index_memory
 from eval_topk_prediction_final import denormalize_s_expr_new
@@ -50,7 +50,7 @@ TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings_normed_expr.npy")
 OUTPUT_FILE = Path("ragnet/outputs.txt")
 RESULTS_FILE = Path("ragnet/results.jsonl")
 
-LLM_MODEL_NAME = "gpt-5-nano" #"gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+LLM_MODEL_NAME = "gpt-5.2-2025-12-11" #"gpt-5-nano" #"gpt-5.2-2025-12-11" #"gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 LLM_MODEL_PRICING = {
     "gpt-4.1-mini": {
         "input": 0.15 / 1_000_000,
@@ -155,6 +155,34 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
 
     prompts_batch = await get_prompts(examples_batch, train_data, train_embeddings, top_k)
     all_normed_expr, all_sparql_queries, all_predictions, total_cost = await get_predictions_gpt(prompts_batch, examples_batch, database_info)
+    failed_indices = [ idx for idx in range(len(examples_batch)) if len(all_predictions[idx]) == 0 ]
+    max_retries = 2
+    retry = 1
+    while len(failed_indices) > 0 and retry < max_retries:
+        prompts_batch_failed = []
+        for idx in failed_indices:
+            prompt = prompts_batch[idx]
+            correction_prompt = f"{prompt}{all_normed_expr[idx]}\nThis last logical form is incorrect. First, provide a detailed explanation, in 1-4 sentences, explaining why it is incorrect. Then, generate a new logical form in the same format as the other logical forms, starting with Logical form: "
+            #reasoning, _ = await get_response_gpt(correction_prompt, system_prompt_lambda_dcs_correction)
+            #prompt_failed = f"{prompt}{all_normed_expr[idx]}\nThis last logical form is incorrect for the following reason: {reasoning}. Output the correct logical form below.\nLogical form: "
+            prompts_batch_failed.append(correction_prompt)
+        examples_batch_failed = [ examples_batch[idx] for idx in failed_indices ]
+        all_normed_expr_failed, all_sparql_queries_failed, all_predictions_failed, total_cost_failed = await get_predictions_gpt(
+            prompts_batch_failed, examples_batch_failed, database_info
+        )
+        total_cost += total_cost_failed
+        new_failed_indices = []
+        for i, idx in enumerate(failed_indices):
+            if len(all_predictions_failed[i]) == 0:
+                new_failed_indices.append(idx)
+                continue
+            all_normed_expr[idx] = all_normed_expr_failed[i]
+            all_sparql_queries[idx] = all_sparql_queries_failed[i]
+            all_predictions[idx] = all_predictions_failed[i]
+        retry += 1
+        import pdb; pdb.set_trace()
+        failed_indices = new_failed_indices
+        
     #get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
@@ -201,13 +229,13 @@ async def get_similar_train_examples(test_input, train_data, train_embeddings, t
     return [ list(train_data.values())[idx] for idx in top_k_indices ]
 
 
-async def get_normed_expr_gpt(prompt: str):
+async def get_response_gpt(prompt: str, system_prompt: str):
     content, usage = None, None
     try:
         response = await openai_client.chat.completions.create(
             model=LLM_MODEL_NAME,
             messages=[
-                {"role": "system", "content": system_prompt_lambda_dcs_type_check},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ]
         )
@@ -218,20 +246,13 @@ async def get_normed_expr_gpt(prompt: str):
     return content, usage
 
 def post_process_normed_expr_gpt(expr):
+    if "Logical form" in expr: # Cut off everything before prefix
+        expr = expr[expr.index("Logical form"):]
     expr = expr.replace("Logical form:", "") # Remove prefix
     expr = expr.replace('_', ' ') # remove underscores
     expr = expr.replace(".", " , ") # replace periods
     expr = expr.replace('\n', ' ').replace('\t', ' ')   # remove newlines and tabs
     expr = re.sub(r'\s+', ' ', expr).strip() # collapse multiple spaces
-
-    # Keep only first 3 comma-separated phrases inside [ ... ]
-    def trim_brackets(match):
-        content = match.group(1)
-        parts = [p.strip() for p in content.split(',')]
-        trimmed = ' , '.join(parts[:3])
-        return f"[ {trimmed} ]"
-    expr = re.sub(r'\[\s*(.*?)\s*\]', trim_brackets, expr)
-
     return expr
 
 
@@ -243,7 +264,7 @@ async def get_predictions_gpt(prompts, examples_batch, database_info):
     total_input_tokens = 0
     total_output_tokens = 0
 
-    tasks = [get_normed_expr_gpt(prompt) for prompt in prompts]
+    tasks = [get_response_gpt(prompt, system_prompt_lambda_dcs_examples_constrained) for prompt in prompts]
     results = await asyncio.gather(*tasks)
 
     for i, (decoded, usage) in enumerate(results):
@@ -294,6 +315,7 @@ async def get_predictions_gpt(prompts, examples_batch, database_info):
         total_input_tokens * pricing["input"]
         + total_output_tokens * pricing["output"]
     )
+    print(f"LLM cost: {total_cost}")
 
     return all_normed_expr, all_sparql_queries, all_predictions, total_cost
 
