@@ -46,11 +46,11 @@ CANDIDATE_ENTITY_MAP_NAME = "data/WebQSP/entity_retrieval/disamb_entities/WebQSP
 TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relation_label_map.json"
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
-TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings_normed_expr.npy")
+TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings_all.npy") #Path("ragnet/train_embeddings_normed_expr.npy")
 OUTPUT_FILE = Path("ragnet/outputs.txt")
 RESULTS_FILE = Path("ragnet/results.jsonl")
 
-LLM_MODEL_NAME = "gpt-5.2-2025-12-11" #"gpt-5-nano" #"gpt-5.2-2025-12-11" #"gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+LLM_MODEL_NAME = "gpt-5.2-2025-12-1" #"o3-2025-04-16" #"gpt-5.2-2025-12-11" #"gpt-5-nano" #"gpt-5.2-2025-12-11" #"gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 LLM_MODEL_PRICING = {
     "gpt-4.1-mini": {
         "input": 0.15 / 1_000_000,
@@ -63,6 +63,10 @@ LLM_MODEL_PRICING = {
     "gpt-5-nano": {
         "input": 0.05 / 1_000_000,
         "output": 0.40 / 1_000_000
+    },
+    "o3-2025-04-16": {
+        "input": 2.00 / 1_000_000,
+        "output": 8.00 / 1_000_000
     }
 }
 
@@ -133,12 +137,13 @@ class StopOnMultipleWords(StoppingCriteria):
 async def get_prompts(examples_batch, train_data, train_embeddings, top_k):
     prompts_batch = []
     #questions = [ example["question"] for example in examples_batch ]
-    normed_exprs = [ example["normed_sexpr"] for example in examples_batch ]
+    #normed_exprs = [ example["normed_sexpr"] for example in examples_batch ]
     #similarity_tasks = [ get_similar_train_examples(q, train_data, train_embeddings) for q in questions ]
-    similarity_tasks = [ get_similar_train_examples(expr, train_data, train_embeddings) for expr in normed_exprs ]
+    #similarity_tasks = [ get_similar_train_examples(expr, train_data, train_embeddings) for expr in normed_exprs ]
+    inputs = [ example["question"] + "\n" + example["normed_sexpr"] for example in examples_batch ]
+    similarity_tasks = [ get_similar_train_examples(inp, train_data, train_embeddings) for inp in inputs ]
     similarity_results = await asyncio.gather(*similarity_tasks)
-    #total_tokens, cost = compute_embedding_cost(questions)
-    total_tokens, cost = compute_embedding_cost(normed_exprs)
+    total_tokens, cost = compute_embedding_cost(inputs)
     print(f"Embedding cost: {cost}")
     for i, example in enumerate(examples_batch):
         prompt = ""
@@ -155,33 +160,32 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
 
     prompts_batch = await get_prompts(examples_batch, train_data, train_embeddings, top_k)
     all_normed_expr, all_sparql_queries, all_predictions, total_cost = await get_predictions_gpt(prompts_batch, examples_batch, database_info)
-    failed_indices = [ idx for idx in range(len(examples_batch)) if len(all_predictions[idx]) == 0 ]
-    max_retries = 2
-    retry = 1
-    while len(failed_indices) > 0 and retry < max_retries:
-        prompts_batch_failed = []
-        for idx in failed_indices:
-            prompt = prompts_batch[idx]
-            correction_prompt = f"{prompt}{all_normed_expr[idx]}\nThis last logical form is incorrect. First, provide a detailed explanation, in 1-4 sentences, explaining why it is incorrect. Then, generate a new logical form in the same format as the other logical forms, starting with Logical form: "
+#    failed_indices = [ idx for idx in range(len(examples_batch)) if len(all_predictions[idx]) == 0 ]
+#    max_retries = 2
+#    retry = 1
+#    while len(failed_indices) > 0 and retry < max_retries:
+#        prompts_batch_failed = []
+#        for idx in failed_indices:
+#            prompt = prompts_batch[idx]
+#            correction_prompt = f"{prompt}{all_normed_expr[idx]}\nThis last logical form is incorrect. First, provide a detailed explanation, in 1-4 sentences, explaining why it is incorrect. Then, generate a new logical form in the same format as the other logical forms, starting with Logical form: "
             #reasoning, _ = await get_response_gpt(correction_prompt, system_prompt_lambda_dcs_correction)
             #prompt_failed = f"{prompt}{all_normed_expr[idx]}\nThis last logical form is incorrect for the following reason: {reasoning}. Output the correct logical form below.\nLogical form: "
-            prompts_batch_failed.append(correction_prompt)
-        examples_batch_failed = [ examples_batch[idx] for idx in failed_indices ]
-        all_normed_expr_failed, all_sparql_queries_failed, all_predictions_failed, total_cost_failed = await get_predictions_gpt(
-            prompts_batch_failed, examples_batch_failed, database_info
-        )
-        total_cost += total_cost_failed
-        new_failed_indices = []
-        for i, idx in enumerate(failed_indices):
-            if len(all_predictions_failed[i]) == 0:
-                new_failed_indices.append(idx)
-                continue
-            all_normed_expr[idx] = all_normed_expr_failed[i]
-            all_sparql_queries[idx] = all_sparql_queries_failed[i]
-            all_predictions[idx] = all_predictions_failed[i]
-        retry += 1
-        import pdb; pdb.set_trace()
-        failed_indices = new_failed_indices
+#            prompts_batch_failed.append(correction_prompt)
+#        examples_batch_failed = [ examples_batch[idx] for idx in failed_indices ]
+#        all_normed_expr_failed, all_sparql_queries_failed, all_predictions_failed, total_cost_failed = await get_predictions_gpt(
+#            prompts_batch_failed, examples_batch_failed, database_info
+#        )
+#        total_cost += total_cost_failed
+#        new_failed_indices = []
+#        for i, idx in enumerate(failed_indices):
+#            if len(all_predictions_failed[i]) == 0:
+#                new_failed_indices.append(idx)
+#                continue
+#            all_normed_expr[idx] = all_normed_expr_failed[i]
+#            all_sparql_queries[idx] = all_sparql_queries_failed[i]
+#            all_predictions[idx] = all_predictions_failed[i]
+#        retry += 1
+#        failed_indices = new_failed_indices
         
     #get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
@@ -567,16 +571,17 @@ async def get_train_embeddings():
     if TRAIN_EMBEDDINGS_FILE.exists():
         return train_data, np.load(TRAIN_EMBEDDINGS_FILE)
     #questions = [ example["question"] for example in train_data.values() ]
-    normed_exprs = [ example["normed_sexpr"] for example in train_data.values() ]
+    #normed_exprs = [ example["normed_sexpr"] for example in train_data.values() ]
     #embedding_tasks = [ get_embedding(q) for q in questions ]
-    embedding_tasks = [ get_embedding(expr) for expr in normed_exprs ]
+    #embedding_tasks = [ get_embedding(expr) for expr in normed_exprs ]
+    inputs = [ example["question"] + "\n" + example["normed_sexpr"] for example in train_data.values() ]
+    embedding_tasks = [ get_embedding(inp) for inp in inputs ]
     embeddings = await asyncio.gather(*embedding_tasks)
     train_embeddings = [ [] for _ in train_data ]
     for i, embed in enumerate(embeddings):
         train_embeddings[i] = embed
     train_embeddings = np.array(train_embeddings)
-    #total_tokens, cost = compute_embedding_cost(questions)
-    total_tokens, cost = compute_embedding_cost(normed_exprs)
+    total_tokens, cost = compute_embedding_cost(inputs)
     print(f"Embedding cost: {cost}")
     np.save(TRAIN_EMBEDDINGS_FILE, train_embeddings)
     return train_data, train_embeddings

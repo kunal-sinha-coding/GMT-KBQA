@@ -1,4 +1,4 @@
-def keep_last_n_lines(filename, n=1000):
+def keep_last_n_lines(filename, n=10000):
     with open(filename, "r", encoding="utf-8") as f:
         lines = f.readlines()
 
