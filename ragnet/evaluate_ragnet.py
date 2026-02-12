@@ -46,11 +46,11 @@ CANDIDATE_ENTITY_MAP_NAME = "data/WebQSP/entity_retrieval/disamb_entities/WebQSP
 TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relation_label_map.json"
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
-TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings_all.npy") #Path("ragnet/train_embeddings_normed_expr.npy")
+TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings.npy")
 OUTPUT_FILE = Path("ragnet/outputs.txt")
 RESULTS_FILE = Path("ragnet/results.jsonl")
 
-LLM_MODEL_NAME = "gpt-5.2-2025-12-1" #"o3-2025-04-16" #"gpt-5.2-2025-12-11" #"gpt-5-nano" #"gpt-5.2-2025-12-11" #"gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
+LLM_MODEL_NAME = "o3-2025-04-16" #"gpt-5.2-2025-12-11" #"gpt-5-nano" #"gpt-5.2-2025-12-11" #"gpt-5.2-2025-12-11" #"meta-llama/Llama-3.1-8B" #"meta-llama/Llama-2-7b-chat-hf"
 LLM_MODEL_PRICING = {
     "gpt-4.1-mini": {
         "input": 0.15 / 1_000_000,
@@ -81,7 +81,7 @@ openai_client = AsyncOpenAI(
     api_key=os.environ["OPENAI_API_KEY"]
 )
 
-BATCH_SIZE = 16
+BATCH_SIZE = 2#16
 
 def load_data(split: str):
     data = {}
@@ -136,11 +136,9 @@ class StopOnMultipleWords(StoppingCriteria):
 
 async def get_prompts(examples_batch, train_data, train_embeddings, top_k):
     prompts_batch = []
-    #questions = [ example["question"] for example in examples_batch ]
+    inputs = [ example["question"] for example in examples_batch ]
     #normed_exprs = [ example["normed_sexpr"] for example in examples_batch ]
-    #similarity_tasks = [ get_similar_train_examples(q, train_data, train_embeddings) for q in questions ]
-    #similarity_tasks = [ get_similar_train_examples(expr, train_data, train_embeddings) for expr in normed_exprs ]
-    inputs = [ example["question"] + "\n" + example["normed_sexpr"] for example in examples_batch ]
+    #inputs = [ example["question"] + "\n" + example["normed_sexpr"] for example in examples_batch ]
     similarity_tasks = [ get_similar_train_examples(inp, train_data, train_embeddings) for inp in inputs ]
     similarity_results = await asyncio.gather(*similarity_tasks)
     total_tokens, cost = compute_embedding_cost(inputs)
@@ -195,6 +193,9 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
         question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
         gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
         tp, fp, fn, hits1, hits = get_retrieval_counts(all_predictions[i], answer)
+        if fp > 10000:
+            print("REMOVING OUTLIER")
+            continue
         total_tp += tp
         total_fp += fp
         total_fn += fn
@@ -570,11 +571,7 @@ async def get_train_embeddings():
     print(f"Using train embeddings file: {TRAIN_EMBEDDINGS_FILE}")
     if TRAIN_EMBEDDINGS_FILE.exists():
         return train_data, np.load(TRAIN_EMBEDDINGS_FILE)
-    #questions = [ example["question"] for example in train_data.values() ]
-    #normed_exprs = [ example["normed_sexpr"] for example in train_data.values() ]
-    #embedding_tasks = [ get_embedding(q) for q in questions ]
-    #embedding_tasks = [ get_embedding(expr) for expr in normed_exprs ]
-    inputs = [ example["question"] + "\n" + example["normed_sexpr"] for example in train_data.values() ]
+    inputs = [ example["question"] for example in train_data.values() ]
     embedding_tasks = [ get_embedding(inp) for inp in inputs ]
     embeddings = await asyncio.gather(*embedding_tasks)
     train_embeddings = [ [] for _ in train_data ]
