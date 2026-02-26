@@ -47,7 +47,7 @@ CANDIDATE_ENTITY_MAP_NAME = "data/WebQSP/entity_retrieval/disamb_entities/WebQSP
 TRAIN_RELATION_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_relation_label_map.json"
 TRAIN_TYPE_MAP_NAME = "data/WebQSP/generation/label_maps/WebQSP_train_type_label_map.json"
 
-TRAIN_EMBEDDINGS_FILE = Path("ragnet/train_embeddings_adapter.npy")
+TRAIN_EMBEDDINGS_FILE = Path("ragnet/embedding_cache/train_embeddings_adapter.npy")
 OUTPUT_FILE = Path("ragnet/outputs.txt")
 RESULTS_FILE = Path("ragnet/results.jsonl")
 
