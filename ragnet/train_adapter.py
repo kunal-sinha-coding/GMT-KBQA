@@ -14,6 +14,7 @@ from openai import OpenAI
 # ------------------------------------------------
 
 TRAIN_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_train.json"
+ADAPTER_PATH = "adapter.pt"
 
 EMBED_MODEL = "text-embedding-3-large"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -21,6 +22,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 64
 EPOCHS = 10
 LR = 1e-4
+EMB_DIM = 3072
 PROJ_DIM = 768
 
 CACHE_DIR = Path("adapter_cache")
