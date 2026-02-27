@@ -220,7 +220,8 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
             output += f"\nHits@1: {hits1}, Hits: {hits}"
             output_file.write(output)
-            #print(output)
+            print(output)
+            import pdb; pdb.set_trace()
     return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count, total_cost
 
 

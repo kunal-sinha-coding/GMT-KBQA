@@ -23,8 +23,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 BATCH_SIZE = 64
 EPOCHS = 10
 LR = 1e-4
-PROJ_DIM = 768
-TOP_K = 3
+EMB_DIM = 3072
+PROJ_DIM = 3072
 
 CACHE_DIR = Path("ragnet/embedding_cache")
 CACHE_DIR.mkdir(exist_ok=True)
@@ -179,16 +179,19 @@ def evaluate(model):
 
     sim = torch.matmul(zq, zs.T)
 
-    correct = 0
     total = len(zq)
 
+    top_k_values = [1, 2, 3, 4, 5]
+    correct_by_top_k = [ 0 for _ in top_k_values ]
     for i in range(total):
-        topk = torch.topk(sim[i], k=TOP_K).indices
-        if i in topk:
-            correct += 1
+        for j, value in enumerate(top_k_values):
+            topk = torch.topk(sim[i], k=value).indices
+            if i in topk:
+                correct_by_top_k[j] += 1
 
-    acc = correct / total
-    print(f"Top-{TOP_K} Accuracy: {acc:.4f} ({correct}/{total})")
+    accuracy_by_top_k = [ correct / total for correct in correct_by_top_k ]
+    for j, acc in enumerate(accuracy_by_top_k):
+        print(f"Top-{top_k_values[j]} Accuracy: {acc:.4f} ({correct_by_top_k[j]}/{total})")
 
     return acc
 
@@ -212,7 +215,7 @@ def main():
     loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     model = Adapter(
-        in_dim=q_embs.shape[1],
+        in_dim=EMB_DIM,
         out_dim=PROJ_DIM
     ).to(DEVICE)
 
@@ -247,9 +250,7 @@ def main():
     torch.save(model.state_dict(), "adapter.pt")
     print("Saved adapter.pt")
 
-    # ----- EVALUATE -----
     evaluate(model)
-
 
 if __name__ == "__main__":
     main()
