@@ -25,7 +25,6 @@ EPOCHS = 10
 LR = 3e-4
 
 EMB_DIM = 3072
-PROJ_DIM = 3072
 
 HARD_NEG_K = 20
 HARD_NEG_PER_BATCH = 4
@@ -43,22 +42,22 @@ TEST_S_EMB_FILE = CACHE_DIR / "test_sexpr_embs.npy"
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 # ------------------------------------------------
-# DATA LOADING
+# DATA
 # ------------------------------------------------
 
 def load_data(path):
     with open(path) as f:
         raw = json.load(f)
 
-    examples = []
+    data = []
     for ex in raw:
         q = ex.get("question", "").strip()
         s = ex.get("normed_sexpr", "").strip()
         if q and s:
-            examples.append((q, s))
+            data.append((q, s))
 
-    print(f"Loaded {len(examples)} examples")
-    return examples
+    print(f"Loaded {len(data)} examples")
+    return data
 
 # ------------------------------------------------
 # EMBEDDINGS
@@ -78,14 +77,18 @@ def embed_texts(texts, batch_size=32):
 
         all_vecs.extend([x.embedding for x in resp.data])
 
-    return np.array(all_vecs)
+    # ✅ force float32
+    return np.array(all_vecs, dtype=np.float32)
 
 
 def load_or_create_embeddings(data, q_file, s_file):
 
     if q_file.exists() and s_file.exists():
         print("Loading cached embeddings...")
-        return np.load(q_file), np.load(s_file)
+        return (
+            np.load(q_file).astype(np.float32),
+            np.load(s_file).astype(np.float32),
+        )
 
     questions = [x[0] for x in data]
     sexprs = [x[1] for x in data]
@@ -106,8 +109,8 @@ def build_hard_negative_index(q_embs, s_embs):
 
     print("Building hard negatives...")
 
-    q = F.normalize(torch.tensor(q_embs), dim=-1)
-    s = F.normalize(torch.tensor(s_embs), dim=-1)
+    q = F.normalize(torch.tensor(q_embs, dtype=torch.float32), dim=-1)
+    s = F.normalize(torch.tensor(s_embs, dtype=torch.float32), dim=-1)
 
     sim = q @ s.T
 
@@ -128,6 +131,7 @@ def build_hard_negative_index(q_embs, s_embs):
 class PairDataset(Dataset):
 
     def __init__(self, q_embs, s_embs, hard_negs):
+
         self.q = torch.tensor(q_embs, dtype=torch.float32)
         self.s = torch.tensor(s_embs, dtype=torch.float32)
         self.hard_negs = hard_negs
@@ -157,7 +161,7 @@ def collate_fn(batch):
     return q, pos, neg
 
 # ------------------------------------------------
-# RESIDUAL ADAPTER
+# MODELS
 # ------------------------------------------------
 
 class ResidualAdapter(nn.Module):
@@ -176,9 +180,6 @@ class ResidualAdapter(nn.Module):
     def forward(self, x):
         return F.normalize(x + self.alpha * self.mlp(x), dim=-1)
 
-# ------------------------------------------------
-# IDENTITY BASELINE
-# ------------------------------------------------
 
 class IdentityModel(nn.Module):
     def forward(self, x):
@@ -217,8 +218,8 @@ def evaluate(q_model, s_model, label):
         TEST_S_EMB_FILE
     )
 
-    q = torch.tensor(q_embs).to(DEVICE)
-    s = torch.tensor(s_embs).to(DEVICE)
+    q = torch.tensor(q_embs, dtype=torch.float32).to(DEVICE)
+    s = torch.tensor(s_embs, dtype=torch.float32).to(DEVICE)
 
     q_model.eval()
     s_model.eval()
@@ -279,7 +280,7 @@ def main():
 
     evaluate(baseline_q, baseline_s, "BASELINE")
 
-    # ----- TRAINING -----
+    # ----- TRAIN -----
     print("\nTraining adapter...")
 
     for epoch in range(EPOCHS):
@@ -303,11 +304,13 @@ def main():
 
             optimizer.zero_grad()
             loss.backward()
+
             torch.nn.utils.clip_grad_norm_(
                 list(q_model.parameters()) +
                 list(s_model.parameters()),
                 1.0
             )
+
             optimizer.step()
 
             total_loss += loss.item()
