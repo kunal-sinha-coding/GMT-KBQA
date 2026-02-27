@@ -23,12 +23,12 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 BATCH_SIZE = 128
 EPOCHS = 10
-LR = 1e-4
+LR = 1e-4                # Increased again
 TEMPERATURE = 0.02
 
 EMB_DIM = 3072
-
 QUEUE_SIZE = 8192
+MOMENTUM = 0.99         # Less frozen than 0.995
 
 CACHE_DIR = Path("ragnet/embedding_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -43,16 +43,14 @@ client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
 # =====================================================
-# DATA LOADING
+# DATA
 # =====================================================
 
 def load_data(path):
-
     with open(path) as f:
         raw = json.load(f)
 
     examples = []
-
     for ex in raw:
         q = ex.get("question", "").strip()
         s = ex.get("normed_sexpr", "").strip()
@@ -121,7 +119,7 @@ class PairDataset(Dataset):
 
 
 # =====================================================
-# RESIDUAL ADAPTER
+# RESIDUAL ADAPTER (STRONGER)
 # =====================================================
 
 class ResidualAdapter(nn.Module):
@@ -135,11 +133,22 @@ class ResidualAdapter(nn.Module):
             nn.Linear(dim, dim)
         )
 
-        self.scale = nn.Parameter(torch.tensor(0.1))
+        # Stronger initial scale
+        self.scale = nn.Parameter(torch.tensor(1.0))
 
     def forward(self, x):
         delta = self.net(x)
         return F.normalize(x + self.scale * delta, dim=-1)
+
+
+# =====================================================
+# MOMENTUM UPDATE
+# =====================================================
+
+@torch.no_grad()
+def momentum_update(model, momentum_model, m=MOMENTUM):
+    for p, mp in zip(model.parameters(), momentum_model.parameters()):
+        mp.data = mp.data * m + p.data * (1 - m)
 
 
 # =====================================================
@@ -149,14 +158,12 @@ class ResidualAdapter(nn.Module):
 class MemoryQueue:
 
     def __init__(self, dim, size, device):
-
         self.size = size
         self.device = device
 
         self.q_queue = F.normalize(
             torch.randn(size, dim, device=device), dim=-1
         )
-
         self.s_queue = F.normalize(
             torch.randn(size, dim, device=device), dim=-1
         )
@@ -167,12 +174,6 @@ class MemoryQueue:
     def enqueue(self, q, s):
 
         batch_size = q.size(0)
-
-        if batch_size > self.size:
-            q = q[:self.size]
-            s = s[:self.size]
-            batch_size = self.size
-
         end = self.ptr + batch_size
 
         if end <= self.size:
@@ -180,10 +181,8 @@ class MemoryQueue:
             self.s_queue[self.ptr:end] = s
         else:
             first = self.size - self.ptr
-
             self.q_queue[self.ptr:] = q[:first]
             self.s_queue[self.ptr:] = s[:first]
-
             self.q_queue[:batch_size-first] = q[first:]
             self.s_queue[:batch_size-first] = s[first:]
 
@@ -215,9 +214,9 @@ def contrastive_loss(q, s, queue):
 # =====================================================
 
 @torch.no_grad()
-def evaluate(q_model, s_model):
+def evaluate(q_model, s_model, label="MODEL"):
 
-    print("\nRunning evaluation...")
+    print(f"\nRunning evaluation: {label}")
 
     test_data = load_data(TEST_GENERATION_DATA_NAME)
 
@@ -239,19 +238,16 @@ def evaluate(q_model, s_model):
     sim = torch.matmul(zq, zs.T) / TEMPERATURE
 
     total = len(zq)
-
-    top_k_values = [1,2,3,4,5]
-    correct = [0]*len(top_k_values)
+    ks = [1,2,3,4,5]
+    correct = [0]*len(ks)
 
     for i in range(total):
-        for j,k in enumerate(top_k_values):
-            topk = torch.topk(sim[i], k=k).indices
-            if i in topk:
+        for j,k in enumerate(ks):
+            if i in torch.topk(sim[i], k=k).indices:
                 correct[j]+=1
 
-    for j,k in enumerate(top_k_values):
-        acc = correct[j]/total
-        print(f"Top-{k} Accuracy: {acc:.4f} ({correct[j]}/{total})")
+    for j,k in enumerate(ks):
+        print(f"{label} Top-{k}: {correct[j]/total:.4f}")
 
 
 # =====================================================
@@ -277,8 +273,26 @@ def main():
         drop_last=True
     )
 
+    # Baseline evaluation (important)
+    evaluate(
+        lambda x: F.normalize(x, dim=-1),
+        lambda x: F.normalize(x, dim=-1),
+        label="BASELINE"
+    )
+
     q_model = ResidualAdapter(EMB_DIM).to(DEVICE)
     s_model = ResidualAdapter(EMB_DIM).to(DEVICE)
+
+    q_momentum = ResidualAdapter(EMB_DIM).to(DEVICE)
+    s_momentum = ResidualAdapter(EMB_DIM).to(DEVICE)
+
+    q_momentum.load_state_dict(q_model.state_dict())
+    s_momentum.load_state_dict(s_model.state_dict())
+
+    for p in q_momentum.parameters():
+        p.requires_grad = False
+    for p in s_momentum.parameters():
+        p.requires_grad = False
 
     optimizer = torch.optim.AdamW(
         list(q_model.parameters()) +
@@ -287,11 +301,21 @@ def main():
         weight_decay=1e-4
     )
 
-    queue = MemoryQueue(
-        dim=EMB_DIM,
-        size=QUEUE_SIZE,
-        device=DEVICE
-    )
+    queue = MemoryQueue(EMB_DIM, QUEUE_SIZE, DEVICE)
+
+    print("Warming memory queue...")
+    with torch.no_grad():
+        for q, s in loader:
+            q = q.to(DEVICE)
+            s = s.to(DEVICE)
+
+            queue.enqueue(
+                q_momentum(q),
+                s_momentum(s)
+            )
+
+            if queue.ptr == 0:
+                break
 
     print("Training...")
 
@@ -314,9 +338,23 @@ def main():
 
             optimizer.zero_grad()
             loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(
+                list(q_model.parameters()) +
+                list(s_model.parameters()),
+                1.0
+            )
+
             optimizer.step()
 
-            queue.enqueue(zq.detach(), zs.detach())
+            with torch.no_grad():
+                momentum_update(q_model, q_momentum)
+                momentum_update(s_model, s_momentum)
+
+                queue.enqueue(
+                    q_momentum(q),
+                    s_momentum(s)
+                )
 
             total_loss += loss.item()
 
@@ -329,7 +367,7 @@ def main():
 
     print("Saved adapter.pt")
 
-    evaluate(q_model, s_model)
+    evaluate(q_model, s_model, label="ADAPTER")
 
 
 if __name__ == "__main__":
