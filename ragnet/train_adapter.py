@@ -10,24 +10,28 @@ from pathlib import Path
 from openai import OpenAI
 
 
-# ------------------------------------------------
+# =====================================================
 # CONFIG
-# ------------------------------------------------
+# =====================================================
 
 TRAIN_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_train.json"
 TEST_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_test.json"
 
 EMBED_MODEL = "text-embedding-3-large"
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 EPOCHS = 10
 LR = 1e-4
+TEMPERATURE = 0.02
+
 EMB_DIM = 3072
-PROJ_DIM = 3072
+
+QUEUE_SIZE = 8192
 
 CACHE_DIR = Path("ragnet/embedding_cache")
-CACHE_DIR.mkdir(exist_ok=True)
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 Q_EMB_FILE = CACHE_DIR / "question_embs.npy"
 S_EMB_FILE = CACHE_DIR / "sexpr_embs.npy"
@@ -38,36 +42,34 @@ TEST_S_EMB_FILE = CACHE_DIR / "test_sexpr_embs.npy"
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
 
-# ------------------------------------------------
-# DATA
-# ------------------------------------------------
+# =====================================================
+# DATA LOADING
+# =====================================================
 
 def load_data(path):
+
     with open(path) as f:
         raw = json.load(f)
 
     examples = []
+
     for ex in raw:
         q = ex.get("question", "").strip()
         s = ex.get("normed_sexpr", "").strip()
 
-        if not q or not s:
-            continue
+        if q and s:
+            examples.append({"question": q, "normed_sexpr": s})
 
-        examples.append({
-            "question": q,
-            "normed_sexpr": s
-        })
-
-    print(f"Loaded {len(examples)} pairs from {path}")
+    print(f"Loaded {len(examples)} examples from {path}")
     return examples
 
 
-# ------------------------------------------------
+# =====================================================
 # EMBEDDINGS
-# ------------------------------------------------
+# =====================================================
 
 def embed_texts(texts, batch_size=32):
+
     all_vecs = []
 
     for i in tqdm(range(0, len(texts), batch_size), desc="Embedding"):
@@ -101,9 +103,9 @@ def load_or_create_embeddings(data, q_file, s_file):
     return q_embs, s_embs
 
 
-# ------------------------------------------------
+# =====================================================
 # DATASET
-# ------------------------------------------------
+# =====================================================
 
 class PairDataset(Dataset):
 
@@ -114,50 +116,106 @@ class PairDataset(Dataset):
     def __len__(self):
         return len(self.q)
 
-    def __getitem__(self, i):
-        return self.q[i], self.s[i]
+    def __getitem__(self, idx):
+        return self.q[idx], self.s[idx]
 
 
-# ------------------------------------------------
-# ADAPTER
-# ------------------------------------------------
+# =====================================================
+# RESIDUAL ADAPTER
+# =====================================================
 
-class Adapter(nn.Module):
+class ResidualAdapter(nn.Module):
 
-    def __init__(self, in_dim, out_dim):
+    def __init__(self, dim):
         super().__init__()
 
         self.net = nn.Sequential(
-            nn.Linear(in_dim, 2048),
-            nn.ReLU(),
-            nn.Linear(2048, out_dim)
+            nn.Linear(dim, dim),
+            nn.GELU(),
+            nn.Linear(dim, dim)
         )
 
+        self.scale = nn.Parameter(torch.tensor(0.1))
+
     def forward(self, x):
-        return F.normalize(self.net(x), dim=-1)
+        delta = self.net(x)
+        return F.normalize(x + self.scale * delta, dim=-1)
 
 
-# ------------------------------------------------
-# LOSS (Bidirectional Contrastive)
-# ------------------------------------------------
+# =====================================================
+# MEMORY QUEUE
+# =====================================================
 
-def contrastive_loss(q, s, temperature=0.07):
+class MemoryQueue:
 
-    sim = torch.matmul(q, s.T) / temperature
-    labels = torch.arange(len(q)).to(q.device)
+    def __init__(self, dim, size, device):
 
-    loss_q = F.cross_entropy(sim, labels)
-    loss_s = F.cross_entropy(sim.T, labels)
+        self.size = size
+        self.device = device
+
+        self.q_queue = F.normalize(
+            torch.randn(size, dim, device=device), dim=-1
+        )
+
+        self.s_queue = F.normalize(
+            torch.randn(size, dim, device=device), dim=-1
+        )
+
+        self.ptr = 0
+
+    @torch.no_grad()
+    def enqueue(self, q, s):
+
+        batch_size = q.size(0)
+
+        if batch_size > self.size:
+            q = q[:self.size]
+            s = s[:self.size]
+            batch_size = self.size
+
+        end = self.ptr + batch_size
+
+        if end <= self.size:
+            self.q_queue[self.ptr:end] = q
+            self.s_queue[self.ptr:end] = s
+        else:
+            first = self.size - self.ptr
+
+            self.q_queue[self.ptr:] = q[:first]
+            self.s_queue[self.ptr:] = s[:first]
+
+            self.q_queue[:batch_size-first] = q[first:]
+            self.s_queue[:batch_size-first] = s[first:]
+
+        self.ptr = (self.ptr + batch_size) % self.size
+
+
+# =====================================================
+# CONTRASTIVE LOSS
+# =====================================================
+
+def contrastive_loss(q, s, queue):
+
+    all_s = torch.cat([s, queue.s_queue.detach()], dim=0)
+    all_q = torch.cat([q, queue.q_queue.detach()], dim=0)
+
+    sim_q = torch.matmul(q, all_s.T) / TEMPERATURE
+    sim_s = torch.matmul(s, all_q.T) / TEMPERATURE
+
+    labels = torch.arange(len(q), device=q.device)
+
+    loss_q = F.cross_entropy(sim_q, labels)
+    loss_s = F.cross_entropy(sim_s, labels)
 
     return (loss_q + loss_s) / 2
 
 
-# ------------------------------------------------
+# =====================================================
 # EVALUATION
-# ------------------------------------------------
+# =====================================================
 
 @torch.no_grad()
-def evaluate(model):
+def evaluate(q_model, s_model):
 
     print("\nRunning evaluation...")
 
@@ -172,37 +230,36 @@ def evaluate(model):
     q_embs = torch.tensor(q_embs, dtype=torch.float32).to(DEVICE)
     s_embs = torch.tensor(s_embs, dtype=torch.float32).to(DEVICE)
 
-    model.eval()
+    q_model.eval()
+    s_model.eval()
 
-    zq = model(q_embs)
-    zs = model(s_embs)
+    zq = q_model(q_embs)
+    zs = s_model(s_embs)
 
-    sim = torch.matmul(zq, zs.T)
+    sim = torch.matmul(zq, zs.T) / TEMPERATURE
 
     total = len(zq)
 
-    top_k_values = [1, 2, 3, 4, 5]
-    correct_by_top_k = [ 0 for _ in top_k_values ]
+    top_k_values = [1,2,3,4,5]
+    correct = [0]*len(top_k_values)
+
     for i in range(total):
-        for j, value in enumerate(top_k_values):
-            topk = torch.topk(sim[i], k=value).indices
+        for j,k in enumerate(top_k_values):
+            topk = torch.topk(sim[i], k=k).indices
             if i in topk:
-                correct_by_top_k[j] += 1
+                correct[j]+=1
 
-    accuracy_by_top_k = [ correct / total for correct in correct_by_top_k ]
-    for j, acc in enumerate(accuracy_by_top_k):
-        print(f"Top-{top_k_values[j]} Accuracy: {acc:.4f} ({correct_by_top_k[j]}/{total})")
-
-    return acc
+    for j,k in enumerate(top_k_values):
+        acc = correct[j]/total
+        print(f"Top-{k} Accuracy: {acc:.4f} ({correct[j]}/{total})")
 
 
-# ------------------------------------------------
+# =====================================================
 # TRAIN
-# ------------------------------------------------
+# =====================================================
 
 def main():
 
-    # ----- TRAIN DATA -----
     train_data = load_data(TRAIN_GENERATION_DATA_NAME)
 
     q_embs, s_embs = load_or_create_embeddings(
@@ -212,20 +269,37 @@ def main():
     )
 
     dataset = PairDataset(q_embs, s_embs)
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-    model = Adapter(
-        in_dim=EMB_DIM,
-        out_dim=PROJ_DIM
-    ).to(DEVICE)
+    loader = DataLoader(
+        dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        drop_last=True
+    )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+    q_model = ResidualAdapter(EMB_DIM).to(DEVICE)
+    s_model = ResidualAdapter(EMB_DIM).to(DEVICE)
 
-    print("Training adapter...")
+    optimizer = torch.optim.AdamW(
+        list(q_model.parameters()) +
+        list(s_model.parameters()),
+        lr=LR,
+        weight_decay=1e-4
+    )
+
+    queue = MemoryQueue(
+        dim=EMB_DIM,
+        size=QUEUE_SIZE,
+        device=DEVICE
+    )
+
+    print("Training...")
 
     for epoch in range(EPOCHS):
 
-        model.train()
+        q_model.train()
+        s_model.train()
+
         total_loss = 0
 
         for q, s in tqdm(loader):
@@ -233,24 +307,30 @@ def main():
             q = q.to(DEVICE)
             s = s.to(DEVICE)
 
-            zq = model(q)
-            zs = model(s)
+            zq = q_model(q)
+            zs = s_model(s)
 
-            loss = contrastive_loss(zq, zs)
+            loss = contrastive_loss(zq, zs, queue)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+            queue.enqueue(zq.detach(), zs.detach())
+
             total_loss += loss.item()
 
-        avg = total_loss / len(loader)
-        print(f"Epoch {epoch+1}/{EPOCHS} | loss={avg:.4f}")
+        print(f"Epoch {epoch+1}/{EPOCHS} | loss={total_loss/len(loader):.4f}")
 
-    torch.save(model.state_dict(), "adapter.pt")
+    torch.save({
+        "q_model": q_model.state_dict(),
+        "s_model": s_model.state_dict()
+    }, "adapter.pt")
+
     print("Saved adapter.pt")
 
-    evaluate(model)
+    evaluate(q_model, s_model)
+
 
 if __name__ == "__main__":
     main()
