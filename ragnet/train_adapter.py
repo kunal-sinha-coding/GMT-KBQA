@@ -180,6 +180,122 @@ class ResidualAdapter(nn.Module):
     def forward(self, x):
         return F.normalize(x + self.alpha * self.mlp(x), dim=-1)
 
+# ------------------------------------------------
+# Multi-Expert LoRA Geometry Block
+# ------------------------------------------------
+class LoRAExpert(nn.Module):
+    def __init__(self, dim, rank):
+        super().__init__()
+        self.A = nn.Linear(dim, rank, bias=False)
+        self.B = nn.Linear(rank, dim, bias=False)
+
+    def forward(self, x):
+        return self.B(self.A(x))
+
+
+class GeometryBlock(nn.Module):
+    def __init__(self, dim, rank=128, num_experts=2):
+        super().__init__()
+
+        self.norm = nn.LayerNorm(dim)
+
+        self.experts = nn.ModuleList([
+            LoRAExpert(dim, rank)
+            for _ in range(num_experts)
+        ])
+
+        self.gate = nn.Parameter(torch.zeros(num_experts))
+        self.res_scale = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x):
+        h = self.norm(x)
+
+        weights = torch.softmax(self.gate, dim=0)
+
+        update = 0
+        for w, expert in zip(weights, self.experts):
+            update = update + w * expert(h)
+
+        return x + torch.tanh(self.res_scale) * update
+
+
+# ------------------------------------------------
+# SOTA Embedding Adapter
+# ------------------------------------------------
+class SOTAEmbeddingAdapter(nn.Module):
+    def __init__(
+        self,
+        dim=3072,
+        bottleneck=1024,
+        depth=8,
+        rank=128,
+        num_vectors=4,
+    ):
+        super().__init__()
+
+        # ---------- Whitening / anisotropy fix ----------
+        self.input_norm = nn.LayerNorm(dim)
+
+        # ---------- Feature importance ----------
+        self.scale = nn.Parameter(torch.ones(dim))
+
+        # ---------- Manifold projection ----------
+        self.down = nn.Linear(dim, bottleneck)
+
+        # ---------- Deep geometry mixer ----------
+        self.blocks = nn.ModuleList([
+            GeometryBlock(bottleneck, rank)
+            for _ in range(depth)
+        ])
+
+        self.mid_norm = nn.LayerNorm(bottleneck)
+
+        # ---------- Return to embedding space ----------
+        self.up = nn.Linear(bottleneck, dim)
+
+        # ---------- Multi-vector head ----------
+        self.multi_head = nn.Linear(dim, dim * num_vectors)
+        self.vector_weights = nn.Parameter(torch.ones(num_vectors))
+
+        # ---------- Learned similarity temperature ----------
+        self.logit_scale = nn.Parameter(torch.tensor(4.6))
+
+    def forward(self, x):
+        residual = x
+
+        # whitening
+        x = self.input_norm(x)
+
+        # feature reweighting
+        x = x * self.scale
+
+        # manifold projection
+        x = self.down(x)
+
+        # deep geometric adaptation
+        for blk in self.blocks:
+            x = blk(x)
+
+        x = self.mid_norm(x)
+
+        # back to embedding space
+        x = self.up(x)
+
+        # residual merge
+        x = residual + x
+
+        # multi-vector representation
+        x = self.multi_head(x)
+        B = x.size(0)
+        x = x.view(B, -1, residual.size(-1))
+
+        # normalize vectors
+        x = F.normalize(x, dim=-1)
+
+        weights = torch.softmax(self.vector_weights, dim=0)
+
+        return x, weights, self.logit_scale.exp()
+
 
 class IdentityModel(nn.Module):
     def forward(self, x):
@@ -265,8 +381,8 @@ def main():
         collate_fn=collate_fn
     )
 
-    q_model = ResidualAdapter(EMB_DIM).to(DEVICE)
-    s_model = ResidualAdapter(EMB_DIM).to(DEVICE)
+    q_model = SOTAEmbeddingAdapter(EMB_DIM).to(DEVICE)
+    s_model = SOTAEmbeddingAdapter(EMB_DIM).to(DEVICE)
 
     optimizer = torch.optim.AdamW(
         list(q_model.parameters()) +
