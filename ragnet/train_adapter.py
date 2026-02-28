@@ -340,8 +340,8 @@ def evaluate(q_model, s_model, label):
     q_model.eval()
     s_model.eval()
 
-    zq = q_model(q)
-    zs = s_model(s)
+    zq, _, _ = q_model(q)
+    zs, _, _ = s_model(s)
 
     sim = zq @ zs.T
 
@@ -412,9 +412,9 @@ def main():
             pos_s = pos_s.to(DEVICE)
             neg_s = neg_s.to(DEVICE)
 
-            zq = q_model(q)
-            zpos = s_model(pos_s)
-            zneg = s_model(neg_s)
+            zq, _, _ = q_model(q)
+            zpos, _, _ = s_model(pos_s)
+            zneg, _, _ = s_model(neg_s)
 
             loss = contrastive_loss(zq, zpos, zneg)
 
