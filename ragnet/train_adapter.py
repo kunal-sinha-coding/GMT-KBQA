@@ -26,10 +26,6 @@ LR = 3e-4
 
 EMB_DIM = 3072
 
-HARD_NEG_K = 20
-HARD_NEG_PER_BATCH = 20
-TEMPERATURE = 0.2
-
 CACHE_DIR = Path("ragnet/embedding_cache")
 CACHE_DIR.mkdir(exist_ok=True)
 
@@ -103,63 +99,20 @@ def load_or_create_embeddings(data, q_file, s_file):
 
 
 # ------------------------------------------------
-# HARD NEGATIVE MINING
-# ------------------------------------------------
-
-def build_hard_negative_index(q_embs, s_embs):
-
-    print("Building hard negatives...")
-
-    q = F.normalize(torch.tensor(q_embs), dim=-1)
-    s = F.normalize(torch.tensor(s_embs), dim=-1)
-
-    sim = q @ s.T
-
-    hard_negs = []
-
-    for i in tqdm(range(len(q))):
-        sims = sim[i].clone()
-        sims[i] = -1e9
-        topk = torch.topk(sims, HARD_NEG_K).indices
-        hard_negs.append(topk.tolist())
-
-    return hard_negs
-
-
-# ------------------------------------------------
 # DATASET
 # ------------------------------------------------
 
 class PairDataset(Dataset):
 
-    def __init__(self, q_embs, s_embs, hard_negs):
+    def __init__(self, q_embs, s_embs):
         self.q = torch.tensor(q_embs, dtype=torch.float32)
         self.s = torch.tensor(s_embs, dtype=torch.float32)
-        self.hard_negs = hard_negs
 
     def __len__(self):
         return len(self.q)
 
     def __getitem__(self, i):
-
-        neg_ids = np.random.choice(
-            self.hard_negs[i],
-            HARD_NEG_PER_BATCH,
-            replace=False
-        )
-
-        neg_s = self.s[neg_ids]
-
-        return self.q[i], self.s[i], neg_s
-
-
-def collate_fn(batch):
-
-    q = torch.stack([b[0] for b in batch])
-    pos = torch.stack([b[1] for b in batch])
-    neg = torch.cat([b[2] for b in batch], dim=0)
-
-    return q, pos, neg
+        return self.q[i], self.s[i]
 
 
 # ------------------------------------------------
@@ -177,7 +130,7 @@ class LoRAExpert(nn.Module):
 
 
 class GeometryBlock(nn.Module):
-    def __init__(self, dim, rank=128, num_experts=2):
+    def __init__(self, dim, rank=32, num_experts=2):
         super().__init__()
 
         self.norm = nn.LayerNorm(dim)
@@ -192,6 +145,7 @@ class GeometryBlock(nn.Module):
 
     def forward(self, x):
         h = self.norm(x)
+
         weights = torch.softmax(self.gate, dim=0)
 
         update = 0
@@ -202,12 +156,12 @@ class GeometryBlock(nn.Module):
 
 
 # ------------------------------------------------
-# SOTA EMBEDDING ADAPTER
+# ADAPTER (SMALL + STABLE)
 # ------------------------------------------------
 
 class SOTAEmbeddingAdapter(nn.Module):
 
-    def __init__(self, dim=3072, bottleneck=1024, depth=8, rank=128, num_vectors=4):
+    def __init__(self, dim=3072, bottleneck=512, depth=2, num_vectors=4):
         super().__init__()
 
         self.input_norm = nn.LayerNorm(dim)
@@ -216,7 +170,7 @@ class SOTAEmbeddingAdapter(nn.Module):
         self.down = nn.Linear(dim, bottleneck)
 
         self.blocks = nn.ModuleList([
-            GeometryBlock(bottleneck, rank)
+            GeometryBlock(bottleneck)
             for _ in range(depth)
         ])
 
@@ -226,6 +180,7 @@ class SOTAEmbeddingAdapter(nn.Module):
         self.multi_head = nn.Linear(dim, dim * num_vectors)
         self.vector_weights = nn.Parameter(torch.ones(num_vectors))
 
+        # CLIP-style temperature
         self.logit_scale = nn.Parameter(torch.tensor(4.6))
 
     def forward(self, x):
@@ -249,53 +204,45 @@ class SOTAEmbeddingAdapter(nn.Module):
         B = x.size(0)
         x = x.view(B, -1, residual.size(-1))
 
-        x = F.normalize(x, dim=-1)
-
         weights = torch.softmax(self.vector_weights, dim=0)
 
         return x, weights, self.logit_scale.exp()
 
 
 # ------------------------------------------------
-# IDENTITY BASELINE
+# BASELINE
 # ------------------------------------------------
 
 class IdentityModel(nn.Module):
     def forward(self, x):
-        x = F.normalize(x, dim=-1)
-        return (
-            x.unsqueeze(1),
-            torch.tensor([1.0], device=x.device),
-            torch.tensor(1.0, device=x.device),
-        )
+        x = x.unsqueeze(1)
+        return x, torch.tensor([1.0], device=x.device), torch.tensor(1.0, device=x.device)
 
 
 # ------------------------------------------------
-# MULTI-VECTOR COLLAPSE
+# MULTI VECTOR COLLAPSE
 # ------------------------------------------------
 
 def collapse_vectors(z, weights):
-    return F.normalize(
-        torch.sum(z * weights.view(1, -1, 1), dim=1),
-        dim=-1,
-    )
+
+    z = torch.sum(z * weights.view(1, -1, 1), dim=1)
+    return F.normalize(z, dim=-1)
 
 
 # ------------------------------------------------
-# LOSS
+# BIDIRECTIONAL INFONCE
 # ------------------------------------------------
 
-def contrastive_loss(q, pos_s, neg_s):
+def contrastive_loss(zq, zs, temperature):
 
-    pos_sim = torch.sum(q * pos_s, dim=-1, keepdim=True)
-    neg_sim = q @ neg_s.T
+    logits = (zq @ zs.T) / temperature
 
-    logits = torch.cat([pos_sim, neg_sim], dim=1)
-    logits /= TEMPERATURE
+    labels = torch.arange(len(zq), device=zq.device)
 
-    labels = torch.zeros(len(q), dtype=torch.long, device=q.device)
+    loss_q = F.cross_entropy(logits, labels)
+    loss_s = F.cross_entropy(logits.T, labels)
 
-    return F.cross_entropy(logits, labels)
+    return (loss_q + loss_s) / 2
 
 
 # ------------------------------------------------
@@ -315,8 +262,8 @@ def evaluate(q_model, s_model, label):
         TEST_S_EMB_FILE
     )
 
-    q = torch.tensor(q_embs, dtype=torch.float32).to(DEVICE)
-    s = torch.tensor(s_embs, dtype=torch.float32).to(DEVICE)
+    q = torch.tensor(q_embs).to(DEVICE)
+    s = torch.tensor(s_embs).to(DEVICE)
 
     q_model.eval()
     s_model.eval()
@@ -331,11 +278,10 @@ def evaluate(q_model, s_model, label):
 
     total = len(zq)
 
-    for k in [1, 2, 3, 4, 5]:
+    for k in [1,2,3,4,5]:
         correct = 0
         for i in range(total):
-            topk = torch.topk(sim[i], k).indices
-            if i in topk:
+            if i in torch.topk(sim[i], k).indices:
                 correct += 1
 
         print(f"Top-{k} Accuracy: {correct/total:.4f} ({correct}/{total})")
@@ -355,24 +301,23 @@ def main():
         S_EMB_FILE
     )
 
-    hard_negs = build_hard_negative_index(q_embs, s_embs)
-
-    dataset = PairDataset(q_embs, s_embs, hard_negs)
+    dataset = PairDataset(q_embs, s_embs)
 
     loader = DataLoader(
         dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        collate_fn=collate_fn
+        drop_last=True
     )
 
-    q_model = SOTAEmbeddingAdapter(EMB_DIM).to(DEVICE)
-    s_model = SOTAEmbeddingAdapter(EMB_DIM).to(DEVICE)
+    q_model = SOTAEmbeddingAdapter().to(DEVICE)
+    s_model = SOTAEmbeddingAdapter().to(DEVICE)
 
     optimizer = torch.optim.AdamW(
         list(q_model.parameters()) +
         list(s_model.parameters()),
-        lr=LR
+        lr=LR,
+        weight_decay=1e-2
     )
 
     baseline_q = IdentityModel().to(DEVICE)
@@ -389,21 +334,20 @@ def main():
 
         total_loss = 0
 
-        for q, pos_s, neg_s in tqdm(loader):
+        for q, s in tqdm(loader):
 
             q = q.to(DEVICE)
-            pos_s = pos_s.to(DEVICE)
-            neg_s = neg_s.to(DEVICE)
+            s = s.to(DEVICE)
 
-            zq, wq, _ = q_model(q)
-            zpos, ws, _ = s_model(pos_s)
-            zneg, ws_neg, _ = s_model(neg_s)
+            zq, wq, logit_scale = q_model(q)
+            zs, ws, _ = s_model(s)
 
             zq = collapse_vectors(zq, wq)
-            zpos = collapse_vectors(zpos, ws)
-            zneg = collapse_vectors(zneg, ws_neg)
+            zs = collapse_vectors(zs, ws)
 
-            loss = contrastive_loss(zq, zpos, zneg)
+            temperature = 1 / logit_scale
+
+            loss = contrastive_loss(zq, zs, temperature)
 
             optimizer.zero_grad()
             loss.backward()
