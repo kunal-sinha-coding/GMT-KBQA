@@ -21,13 +21,13 @@ EMBED_MODEL = "text-embedding-3-large"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 BATCH_SIZE = 64
-EPOCHS = 10
+EPOCHS = 100
 LR = 3e-4
 
 EMB_DIM = 3072
 
 HARD_NEG_K = 20
-HARD_NEG_PER_BATCH = 4
+HARD_NEG_PER_BATCH = 20#4
 TEMPERATURE = 0.2
 
 CACHE_DIR = Path("ragnet/embedding_cache")
