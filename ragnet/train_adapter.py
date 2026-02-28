@@ -27,7 +27,7 @@ LR = 3e-4
 EMB_DIM = 3072
 
 HARD_NEG_K = 20
-HARD_NEG_PER_BATCH = 20#4
+HARD_NEG_PER_BATCH = 20
 TEMPERATURE = 0.2
 
 CACHE_DIR = Path("ragnet/embedding_cache")
@@ -59,6 +59,7 @@ def load_data(path):
     print(f"Loaded {len(data)} examples")
     return data
 
+
 # ------------------------------------------------
 # EMBEDDINGS
 # ------------------------------------------------
@@ -77,7 +78,6 @@ def embed_texts(texts, batch_size=32):
 
         all_vecs.extend([x.embedding for x in resp.data])
 
-    # ✅ force float32
     return np.array(all_vecs, dtype=np.float32)
 
 
@@ -101,6 +101,7 @@ def load_or_create_embeddings(data, q_file, s_file):
 
     return q_embs, s_embs
 
+
 # ------------------------------------------------
 # HARD NEGATIVE MINING
 # ------------------------------------------------
@@ -109,8 +110,8 @@ def build_hard_negative_index(q_embs, s_embs):
 
     print("Building hard negatives...")
 
-    q = F.normalize(torch.tensor(q_embs, dtype=torch.float32), dim=-1)
-    s = F.normalize(torch.tensor(s_embs, dtype=torch.float32), dim=-1)
+    q = F.normalize(torch.tensor(q_embs), dim=-1)
+    s = F.normalize(torch.tensor(s_embs), dim=-1)
 
     sim = q @ s.T
 
@@ -124,6 +125,7 @@ def build_hard_negative_index(q_embs, s_embs):
 
     return hard_negs
 
+
 # ------------------------------------------------
 # DATASET
 # ------------------------------------------------
@@ -131,7 +133,6 @@ def build_hard_negative_index(q_embs, s_embs):
 class PairDataset(Dataset):
 
     def __init__(self, q_embs, s_embs, hard_negs):
-
         self.q = torch.tensor(q_embs, dtype=torch.float32)
         self.s = torch.tensor(s_embs, dtype=torch.float32)
         self.hard_negs = hard_negs
@@ -160,29 +161,11 @@ def collate_fn(batch):
 
     return q, pos, neg
 
-# ------------------------------------------------
-# MODELS
-# ------------------------------------------------
-
-class ResidualAdapter(nn.Module):
-
-    def __init__(self, dim):
-        super().__init__()
-
-        self.mlp = nn.Sequential(
-            nn.Linear(dim, 2048),
-            nn.ReLU(),
-            nn.Linear(2048, dim)
-        )
-
-        self.alpha = nn.Parameter(torch.tensor(0.1))
-
-    def forward(self, x):
-        return F.normalize(x + self.alpha * self.mlp(x), dim=-1)
 
 # ------------------------------------------------
-# Multi-Expert LoRA Geometry Block
+# MODEL BLOCKS
 # ------------------------------------------------
+
 class LoRAExpert(nn.Module):
     def __init__(self, dim, rank):
         super().__init__()
@@ -209,7 +192,6 @@ class GeometryBlock(nn.Module):
 
     def forward(self, x):
         h = self.norm(x)
-
         weights = torch.softmax(self.gate, dim=0)
 
         update = 0
@@ -220,76 +202,53 @@ class GeometryBlock(nn.Module):
 
 
 # ------------------------------------------------
-# SOTA Embedding Adapter
+# SOTA EMBEDDING ADAPTER
 # ------------------------------------------------
+
 class SOTAEmbeddingAdapter(nn.Module):
-    def __init__(
-        self,
-        dim=3072,
-        bottleneck=1024,
-        depth=8,
-        rank=128,
-        num_vectors=4,
-    ):
+
+    def __init__(self, dim=3072, bottleneck=1024, depth=8, rank=128, num_vectors=4):
         super().__init__()
 
-        # ---------- Whitening / anisotropy fix ----------
         self.input_norm = nn.LayerNorm(dim)
-
-        # ---------- Feature importance ----------
         self.scale = nn.Parameter(torch.ones(dim))
 
-        # ---------- Manifold projection ----------
         self.down = nn.Linear(dim, bottleneck)
 
-        # ---------- Deep geometry mixer ----------
         self.blocks = nn.ModuleList([
             GeometryBlock(bottleneck, rank)
             for _ in range(depth)
         ])
 
         self.mid_norm = nn.LayerNorm(bottleneck)
-
-        # ---------- Return to embedding space ----------
         self.up = nn.Linear(bottleneck, dim)
 
-        # ---------- Multi-vector head ----------
         self.multi_head = nn.Linear(dim, dim * num_vectors)
         self.vector_weights = nn.Parameter(torch.ones(num_vectors))
 
-        # ---------- Learned similarity temperature ----------
         self.logit_scale = nn.Parameter(torch.tensor(4.6))
 
     def forward(self, x):
+
         residual = x
 
-        # whitening
         x = self.input_norm(x)
-
-        # feature reweighting
         x = x * self.scale
-
-        # manifold projection
         x = self.down(x)
 
-        # deep geometric adaptation
         for blk in self.blocks:
             x = blk(x)
 
         x = self.mid_norm(x)
-
-        # back to embedding space
         x = self.up(x)
 
-        # residual merge
         x = residual + x
 
-        # multi-vector representation
         x = self.multi_head(x)
+
         B = x.size(0)
         x = x.view(B, -1, residual.size(-1))
 
-        # normalize vectors
         x = F.normalize(x, dim=-1)
 
         weights = torch.softmax(self.vector_weights, dim=0)
@@ -297,9 +256,30 @@ class SOTAEmbeddingAdapter(nn.Module):
         return x, weights, self.logit_scale.exp()
 
 
+# ------------------------------------------------
+# IDENTITY BASELINE
+# ------------------------------------------------
+
 class IdentityModel(nn.Module):
     def forward(self, x):
-        return F.normalize(x, dim=-1)
+        x = F.normalize(x, dim=-1)
+        return (
+            x.unsqueeze(1),
+            torch.tensor([1.0], device=x.device),
+            torch.tensor(1.0, device=x.device),
+        )
+
+
+# ------------------------------------------------
+# MULTI-VECTOR COLLAPSE
+# ------------------------------------------------
+
+def collapse_vectors(z, weights):
+    return F.normalize(
+        torch.sum(z * weights.view(1, -1, 1), dim=1),
+        dim=-1,
+    )
+
 
 # ------------------------------------------------
 # LOSS
@@ -316,6 +296,7 @@ def contrastive_loss(q, pos_s, neg_s):
     labels = torch.zeros(len(q), dtype=torch.long, device=q.device)
 
     return F.cross_entropy(logits, labels)
+
 
 # ------------------------------------------------
 # EVALUATION
@@ -340,14 +321,17 @@ def evaluate(q_model, s_model, label):
     q_model.eval()
     s_model.eval()
 
-    zq, _, _ = q_model(q)
-    zs, _, _ = s_model(s)
+    zq, wq, _ = q_model(q)
+    zs, ws, _ = s_model(s)
+
+    zq = collapse_vectors(zq, wq)
+    zs = collapse_vectors(zs, ws)
 
     sim = zq @ zs.T
 
     total = len(zq)
 
-    for k in [1,2,3,4,5]:
+    for k in [1, 2, 3, 4, 5]:
         correct = 0
         for i in range(total):
             topk = torch.topk(sim[i], k).indices
@@ -355,6 +339,7 @@ def evaluate(q_model, s_model, label):
                 correct += 1
 
         print(f"Top-{k} Accuracy: {correct/total:.4f} ({correct}/{total})")
+
 
 # ------------------------------------------------
 # TRAIN
@@ -390,13 +375,11 @@ def main():
         lr=LR
     )
 
-    # ----- BASELINE -----
     baseline_q = IdentityModel().to(DEVICE)
     baseline_s = IdentityModel().to(DEVICE)
 
     evaluate(baseline_q, baseline_s, "BASELINE")
 
-    # ----- TRAIN -----
     print("\nTraining adapter...")
 
     for epoch in range(EPOCHS):
@@ -412,9 +395,13 @@ def main():
             pos_s = pos_s.to(DEVICE)
             neg_s = neg_s.to(DEVICE)
 
-            zq, _, _ = q_model(q)
-            zpos, _, _ = s_model(pos_s)
-            zneg, _, _ = s_model(neg_s)
+            zq, wq, _ = q_model(q)
+            zpos, ws, _ = s_model(pos_s)
+            zneg, ws_neg, _ = s_model(neg_s)
+
+            zq = collapse_vectors(zq, wq)
+            zpos = collapse_vectors(zpos, ws)
+            zneg = collapse_vectors(zneg, ws_neg)
 
             loss = contrastive_loss(zq, zpos, zneg)
 
@@ -441,6 +428,7 @@ def main():
     }, "adapter.pt")
 
     print("Saved adapter.pt")
+
 
 # ------------------------------------------------
 
