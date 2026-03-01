@@ -26,7 +26,7 @@ import re
 from openai import AsyncOpenAI
 import asyncio
 import tiktoken
-from ragnet.train_adapter import Adapter, EMB_DIM, PROJ_DIM, ADAPTER_PATH
+#from ragnet.train_adapter import Adapter, EMB_DIM, PROJ_DIM, ADAPTER_PATH
 
 BLANK_TOKEN = '[BLANK]'
 LLM_PAD_TOKEN = '[PAD]'
@@ -85,9 +85,9 @@ openai_client = AsyncOpenAI(
 BATCH_SIZE = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-adapter = Adapter(EMB_DIM, PROJ_DIM).to(device)
-adapter.load_state_dict(torch.load(ADAPTER_PATH, map_location=device))
-adapter.eval()
+#adapter = Adapter(EMB_DIM, PROJ_DIM).to(device)
+#adapter.load_state_dict(torch.load(ADAPTER_PATH, map_location=device))
+#adapter.eval()
 
 def load_data(split: str):
     data = {}
@@ -142,7 +142,7 @@ class StopOnMultipleWords(StoppingCriteria):
 
 async def get_prompts(examples_batch, train_data, train_embeddings, top_k):
     prompts_batch = []
-    inputs = [ example["question"] for example in examples_batch ]
+    inputs = [ example["normed_sexpr"] for example in examples_batch ]
     #normed_exprs = [ example["normed_sexpr"] for example in examples_batch ]
     #inputs = [ example["question"] + "\n" + example["normed_sexpr"] for example in examples_batch ]
     similarity_tasks = [ get_similar_train_examples(inp, train_data, train_embeddings) for inp in inputs ]
@@ -220,8 +220,6 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
             output += f"\nHits@1: {hits1}, Hits: {hits}"
             output_file.write(output)
-            print(output)
-            import pdb; pdb.set_trace()
     return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count, total_cost
 
 
@@ -234,10 +232,10 @@ def compute_cosine_similarity(v, M):
 
 async def get_similar_train_examples(test_input, train_data, train_embeddings, top_k=3):
     embed = await get_embedding(test_input)
-    with torch.no_grad():
-        x = torch.tensor(embed, dtype=torch.float32).unsqueeze(0).to(device)
-        test_embedding = adapter(x).cpu().numpy()
-    # test_embedding = np.array(embed).reshape((1, -1))
+    #with torch.no_grad():
+    #    x = torch.tensor(embed, dtype=torch.float32).unsqueeze(0).to(device)
+    #    test_embedding = adapter(x).cpu().numpy()
+    test_embedding = np.array(embed).reshape((1, -1))
     cosine_sim = compute_cosine_similarity(test_embedding, train_embeddings)
     top_k_indices = np.argpartition(cosine_sim, -top_k)[-top_k:]
     top_k_indices = top_k_indices[np.argsort(cosine_sim[top_k_indices])[::-1]]
@@ -584,13 +582,13 @@ async def get_train_embeddings():
     inputs = [ example["normed_sexpr"] for example in train_data.values() ]
     embedding_tasks = [ get_embedding(inp) for inp in inputs ]
     embeddings = await asyncio.gather(*embedding_tasks)
-    X = torch.tensor(embeddings, dtype=torch.float32).to(device)
-    with torch.no_grad():
-        train_embeddings = adapter(X).cpu().numpy()
-    # train_embeddings = [ [] for _ in train_data ]
-    # for i, embed in enumerate(embeddings):
-    #     train_embeddings[i] = embed
-    # train_embeddings = np.array(train_embeddings)
+    #X = torch.tensor(embeddings, dtype=torch.float32).to(device)
+    #with torch.no_grad():
+    #    train_embeddings = adapter(X).cpu().numpy()
+    train_embeddings = [ [] for _ in train_data ]
+    for i, embed in enumerate(embeddings):
+        train_embeddings[i] = embed
+    train_embeddings = np.array(train_embeddings)
     total_tokens, cost = compute_embedding_cost(inputs)
     print(f"Embedding cost: {cost}")
     np.save(TRAIN_EMBEDDINGS_FILE, train_embeddings)
