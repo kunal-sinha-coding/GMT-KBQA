@@ -19,7 +19,7 @@ EMBED_MODEL = "text-embedding-3-large"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-BATCH_SIZE = 524#256
+BATCH_SIZE = 2990
 EPOCHS = 500
 LR = 1e-3
 
@@ -28,6 +28,7 @@ CACHE_DIR.mkdir(exist_ok=True)
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
+ADAPTER_PATH = Path("ragnet/adapter.pt")
 
 # ------------------------------------------------
 # DATA
@@ -96,7 +97,7 @@ def build_joint(q, s):
 
 class SmallAdapter(nn.Module):
 
-    def __init__(self, dim=3072, hidden=512):
+    def __init__(self, dim=3072, hidden=8192):#512):
         super().__init__()
 
         self.net = nn.Sequential(
@@ -107,7 +108,7 @@ class SmallAdapter(nn.Module):
         )
 
         #self.scale = nn.Parameter(torch.zeros(1))
-        self.scale = nn.Parameter(torch.tensor(0.01))
+        self.scale = nn.Parameter(torch.tensor(0.0))
 
     def forward(self, x):
         return F.normalize(x + self.scale * self.net(x), dim=-1)
@@ -153,7 +154,6 @@ class SmallAdapterStacked(nn.Module):
 # ------------------------------------------------
 
 def contrastive_loss(zq, zs, temperature=0.05):
-
     logits = zq @ zs.T / temperature
     labels = torch.arange(len(zq), device=zq.device)
 
@@ -230,7 +230,7 @@ def contrastive_and_geometry_loss(zq, zs):
 def kl_divergence_loss(
     student_logits,      # (B, D) adapter output
     teacher_logits,      # (B, D) joint embeddings (same batch)
-    temperature=1.0
+    temperature=0.1
 ):
     """
     Distill retrieval behavior from joint embeddings.
@@ -265,15 +265,13 @@ def kl_divergence_loss(
 
     return loss
 
-def topk_kl_loss(student_emb, teacher_emb, train_joint, k=64, T=0.05):
+def topk_kl_divergence_loss(student_logits, teacher_logits, k=64, T=0.1):
 
     with torch.no_grad():
-        teacher_logits = teacher_emb @ train_joint.T
         topk_vals, topk_idx = teacher_logits.topk(k, dim=-1)
 
         teacher_probs = F.softmax(topk_vals / T, dim=-1)
 
-    student_logits = student_emb @ train_joint.T
     student_topk = torch.gather(student_logits, 1, topk_idx)
 
     student_log_probs = F.log_softmax(student_topk / T, dim=-1)
@@ -299,9 +297,50 @@ def compute_teacher_targets(train_joint, batch_size=256):
     return torch.cat(targets)
 
 
-def retrieval_distill_loss(zq, train_joint, teacher_idx):
-    logits = zq @ train_joint.T
+def retrieval_distill_loss(zq, train_joint, teacher_idx, temperature=0.1):
+    logits = (zq @ train_joint.T) / temperature
     return F.cross_entropy(logits, teacher_idx)
+
+
+def residual_difference_loss(zq, target_joint, original_q):
+    """
+    zq: The output of adapter(original_q) -> already normalized
+    target_joint: The E(Q+S) from your teacher -> already normalized
+    """
+    # 1. Primary Alignment: The predicted vector should be close to the target
+    # Since they are normalized, MSE is equivalent to optimizing Cosine Similarity
+    mse_loss = F.mse_loss(zq, target_joint)
+
+    # 2. Directional Penalty:
+    # Ensure the 'move' we made from Q is in the right direction
+    predicted_move = zq - original_q
+    actual_move = target_joint - original_q
+
+    # Cosine embedding loss forces the direction of the 'move' to align
+    direction_loss = 1 - F.cosine_similarity(predicted_move, actual_move).mean()
+
+    return mse_loss + 0.1 * direction_loss
+
+def info_nce_loss(zq, target_joint, all_train_joint, temperature=0.07):
+    """
+    zq: [B, D] - Adapter output
+    target_joint: [B, D] - The specific positive targets for this batch
+    all_train_joint: [N, D] - The entire database of joint embeddings
+    """
+    # 1. Similarity to the correct target (Positive Logits)
+    # Shape: [B]
+    pos_sim = torch.sum(zq * target_joint, dim=-1) / temperature
+    
+    # 2. Similarity to EVERY joint embedding in the training set (All Logits)
+    # Shape: [B, N]
+    all_sims = (zq @ all_train_joint.T) / temperature
+    
+    # 3. LogSumExp over the N dimension (The denominator of Softmax)
+    # This forces zq to be further from ALL negatives than it is to the positive
+    loss = -pos_sim + torch.logsumexp(all_sims, dim=-1)
+    
+    return loss.mean()
+
 # ------------------------------------------------
 # RETRIEVAL
 # ------------------------------------------------
@@ -311,7 +350,6 @@ def nearest_neighbor(query, database):
     sim = query @ database.T
     return torch.argmax(sim, dim=1)
 
-
 # ------------------------------------------------
 # AGREEMENT EVAL
 # ------------------------------------------------
@@ -319,10 +357,10 @@ def nearest_neighbor(query, database):
 @torch.no_grad()
 def evaluate_alignment(
     test_q,
-    #test_s,
-    #test_joint,
+    test_s,
+    test_joint,
     train_q,
-    #train_s,
+    train_s,
     train_joint,
     gold,
     label,
@@ -332,19 +370,39 @@ def evaluate_alignment(
 
     # Variants
     qq = nearest_neighbor(test_q, train_q)
-    #qs = nearest_neighbor(test_q, train_s)
+    qs = nearest_neighbor(test_q, train_s)
     qj = nearest_neighbor(test_q, train_joint)
 
     total = len(gold)
 
     qq_agree = (qq == gold).sum().item()
-    #qs_agree = (qs == gold).sum().item()
+    qs_agree = (qs == gold).sum().item()
     qj_agree = (qj == gold).sum().item()
 
     print(f"Q→Q agreement:   {qq_agree/total:.4f} ({qq_agree}/{total})")
-    #print(f"Q→S agreement:   {qs_agree/total:.4f} ({qs_agree}/{total})")
+    print(f"Q→S agreement:   {qs_agree/total:.4f} ({qs_agree}/{total})")
     print(f"Q→Q+S agreement: {qj_agree/total:.4f} ({qj_agree}/{total})")
 
+@torch.no_grad()
+def evaluate_topk_alignment(test_q, test_s, test_joint, train_q, train_s, train_joint, gold, label):
+    print(f"\n===== {label} (Top K Accuracy) =====")
+    
+    total = len(gold)
+    # Ensure gold is on the correct device and reshaped for broadcasting: [N, 1]
+    indices_gold = torch.topk(gold, k=5, dim=1).indices
+
+    # 1. Get Top 5 for both variants
+    # sim_qq: [N, N_train], sim_qj: [N, N_train]
+    indices_qq = torch.topk(test_q @ train_q.T, k=5, dim=1).indices
+    indices_qs = torch.topk(test_q @ train_s.T, k=5, dim=1).indices
+    indices_qj = torch.topk(test_q @ train_joint.T, k=5, dim=1).indices
+    
+    acc_qq = (indices_qq[:, 0] == indices_gold[:, 0]).float().mean().item()
+    acc_qs = (indices_qs[:, 0] == indices_gold[:, 0]).float().mean().item()
+    acc_qj = (indices_qj[:, 0] == indices_gold[:, 0]).float().mean().item()
+    print(f"Q->Q: {acc_qq}")
+    print(f"Q->S: {acc_qs}")
+    print(f"Q->J: {acc_qj}")
 
 # ------------------------------------------------
 # TRAIN ADAPTER
@@ -357,7 +415,7 @@ def train_adapter(train_q, train_s, train_joint):
     adapter_joint = None#SmallAdapter().to(DEVICE)
 
     optimizer = torch.optim.AdamW(
-        list(adapter_q.parameters()),# +
+        list(adapter_q.parameters()),
         #list(adapter_s.parameters()),
         #list(adapter_joint.parameters()),
         lr=LR,
@@ -365,6 +423,7 @@ def train_adapter(train_q, train_s, train_joint):
 
     N = train_q.size(0)
     #teacher_top1_idx = compute_teacher_targets(train_joint)
+    teacher_top1_idx = torch.arange(N, device=DEVICE)
 
     print("\nTraining small adapter...")
 
@@ -380,39 +439,43 @@ def train_adapter(train_q, train_s, train_joint):
 
             q = train_q[idx]
             joint = train_joint[idx]
-            #s = train_s[idx]
+            s = train_s[idx]
 
             zq = adapter_q(q)
             #zjoint = adapter_joint(joint)
             #zs = adapter_s(s)
             #zjoint = build_joint(zq, zs)
 
-            #contrast = contrastive_loss(zq, joint)
+            #loss = contrastive_loss(zq, zjoint) + 0.1 * F.mse_loss(zjoint, joint)
+            #loss = contrastive_loss(zq, joint)
             loss = kl_divergence_loss(
                 zq @ train_joint.T, 
                 joint @ train_joint.T, 
             )
-            #query_loss = kl_divergence_loss(
+            #loss = kl_divergence_loss(
             #    zq @ zq.T,
             #    joint @ joint.T
             #)
-            #loss = retrieval_loss + query_loss
+            #loss = 0.5 * contrast + 0.5 * div
             #loss = retrieval_distill_loss(
             #    zq, 
             #    train_joint, 
             #    teacher_top1_idx[idx]
             #)
-
+            #loss = residual_difference_loss(zq, joint, q)
+            #loss = info_nce_loss(zq, joint, train_joint)
+    
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
-        print(
-            f"Epoch {epoch+1}/{EPOCHS} "
-            f"loss={total_loss/(N//BATCH_SIZE):.4f}"
-        )
+        if epoch % 10 == 0:
+            print(
+                f"Epoch {epoch+1}/{EPOCHS} ",
+                f"loss={total_loss/(N//BATCH_SIZE):.4f}"
+            )
 
     return adapter_q, adapter_s, adapter_joint
 
@@ -474,13 +537,15 @@ def main():
     ))
     # GOLD STANDARD = joint semantic pair
     gold = nearest_neighbor(test_joint, train_joint)
+    #gold = test_joint @ train_joint.T
+    #gold = test_s @ train_s.T
 
     evaluate_alignment(
         test_q,
-        #test_s,
-        #test_joint,
+        test_s,
+        test_joint,
         train_q,
-        #train_s,
+        train_s,
         train_joint,
         gold,
         "BASELINE EMBEDDINGS"
@@ -509,15 +574,16 @@ def main():
 
     evaluate_alignment(
         test_q_a,
-        #test_s_a,
-        #test_joint,
+        test_s,
+        test_joint,
         train_q_a,
-        #train_s_a,
+        train_s,
         train_joint,
         gold,
         "AFTER SMALL ADAPTER"
     )
-
+    torch.save(adapter_q.state_dict(), ADAPTER_PATH)
+    print(f"Saved to {ADAPTER_PATH}")
 
 # ------------------------------------------------
 
