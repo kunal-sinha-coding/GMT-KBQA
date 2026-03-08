@@ -19,7 +19,7 @@ EMBED_MODEL = "text-embedding-3-large"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-BATCH_SIZE = 2990
+BATCH_SIZE = 512
 EPOCHS = 500
 LR = 1e-3
 
@@ -55,14 +55,14 @@ def load_data(path):
 
 def embed_texts(texts, cache_file):
 
-    if cache_file.exists():
-        print("Loading", cache_file)
-        return np.load(cache_file)
+    #if cache_file.exists():
+    #    print("Loading", cache_file)
+    #    return np.load(cache_file)
 
     vecs = []
 
-    for i in tqdm(range(0, len(texts), 32)):
-        batch = texts[i:i+32]
+    for i in tqdm(range(0, len(texts), 128)):
+        batch = texts[i:i+128]
 
         resp = client.embeddings.create(
             model=EMBED_MODEL,
@@ -489,14 +489,14 @@ def main():
     train = load_data(TRAIN_FILE)
     test  = load_data(TEST_FILE)
 
-    train_q_text = [x[0] for x in train]
-    train_s_text = [x[1] for x in train]
+    train_q_text = [f"Question: {x[0]}" for x in train]
+    train_s_text = [f"Question: {x[1]}" for x in train]
 
     test_q_text = [x[0] for x in test]
     test_s_text = [x[1] for x in test]
 
-    train_joint_text = [x[0] + x[1] for x in train] 
-    test_joint_text = [x[0] + x[1] for x in test]
+    train_joint_text = [f"Question: {x[0]}\nLogical form: {x[1]}" for x in train] 
+    test_joint_text = [f"Question: {x[0]}\nLogical form: {x[1]}" for x in test]
 
     # ---------- embeddings ----------
     train_q = normalize(embed_texts(
