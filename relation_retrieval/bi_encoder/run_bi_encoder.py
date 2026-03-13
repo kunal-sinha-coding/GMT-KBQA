@@ -385,6 +385,40 @@ def get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed
             torch.save(perplexity[i], path)
     return perplexity
 
+def extract_entities_relations(expr: str):
+    relations = []
+    entities = []
+
+    matches = re.findall(r'\[([^\]]+)\]', expr)
+
+    for m in matches:
+        parts = [p.strip() for p in m.split(",")]
+
+        # relation if more than one part
+        if len(parts) >= 3:
+            relation = ".".join(p.replace(" ", "_") for p in parts)
+            relations.append(relation)
+        else:
+            entity = ".".join(parts)
+            entities.append(entity)
+
+    return entities, relations
+
+def get_fake_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, it=0, skip_loss=False, perplexity_dir=None):
+    groundtruth_relations = [
+        extract_entities_relations(expr)[1]
+        for expr in normed_sexpr
+    ]
+    fake_perplexity = torch.zeroes(relations.shape)
+    for i, rels in enumerate(relations):
+        gt_rels = extract_entities_relations(normed_sexpr[i])[1]
+        for j, rel in enumerate(rels):
+            if rel not in gt_rels:
+                continue
+            fake_perplexity[i, j] = 1.0
+    import pdb; pdb.set_trace()
+    return fake_perplexity
+
 def train_bert(
     model, llm_model, llm_tokenizer, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, 
     log_path, model_save_path, dataset_type, perplexity_dir, start, skip_loss, use_baseline
@@ -394,7 +428,7 @@ def train_bert(
     if log_path:
         log_w = open(log_path, 'w')
     scaler = GradScaler()
-    best_loss = np.Inf
+    best_loss = np.inf
     best_epoch = 1
 
     #best_loss, best_epoch = run_evaluation(model, llm_model, llm_tokenizer, device, val_loader, dataset_type, model_path, 0, log_w, best_loss, best_epoch)
@@ -406,7 +440,6 @@ def train_bert(
         mean_loss = 0.0
         count = 0
         model_path = os.path.join(model_save_path, '{}_ep_{}_{}.pt'.format(dataset_type, ep, "baseline" if use_baseline else ""))
-        import pdb; pdb.set_trace()
         perplexity = None
 
         for it, train_batch in enumerate(tqdm(train_loader)):
@@ -414,7 +447,7 @@ def train_bert(
                 continue
             question_token_ids, question_attn_masks, question_token_type_ids, question, relations_token_ids, relations_attn_masks, relations_token_type_ids, relations, golden_id, normed_sexpr = train_batch           
             if not use_baseline:
-                perplexity = get_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, it, skip_loss, perplexity_dir)
+                perplexity = get_fake_perplexity(llm_model, llm_tokenizer, question, relations, device, normed_sexpr, golden_id, it, skip_loss, perplexity_dir)
             if skip_loss:
                 continue
             count += 1
@@ -535,7 +568,7 @@ def main(args):
     lr_scheduler = get_linear_schedule_with_warmup(optimizer=opti, num_warmup_steps=num_warmup_steps, num_training_steps=t_total)
     
     # New code for loading in LLM
-    llm_model, llm_tokenizer = load_llm_and_tokenizer()
+    llm_model, llm_tokenizer = None, None #load_llm_and_tokenizer()
     with open(DEBUG_PATH, "a") as f:
         f.write(f"\n\n\nEXPERIMENT: {wandb_run.name}-{wandb_run.id}\n\n\n")
     

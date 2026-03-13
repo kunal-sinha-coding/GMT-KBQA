@@ -12,8 +12,11 @@ import pandas as pd
 from torch.utils.data import DataLoader, Dataset
 from torch.cuda.amp import autocast, GradScaler
 from tqdm import tqdm
-from transformers import AutoTokenizer, AutoModel, AdamW, get_linear_schedule_with_warmup
+from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
+from torch.optim import AdamW
 from sklearn.metrics import cohen_kappa_score, accuracy_score, f1_score, precision_score, recall_score
+
+TRAIN_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_train.json"
 
 BLANK_TOKEN = '[BLANK]'
 
@@ -196,9 +199,9 @@ class SentencePairClassifier(nn.Module):
         return logits
 
 
-def train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, output_dir):
+def train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, output_dir, train_generation_data):
 
-    best_loss = np.Inf
+    best_loss = np.inf
     # best_f1 = -1.0
     best_epoch = 1
     nb_iterations = len(train_loader)
@@ -215,12 +218,12 @@ def train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_l
 
         net.train()
         running_loss = 0.0
-        import pdb; pdb.set_trace()
         for it, (seq, attn_masks, token_type_ids, labels, indexes) in enumerate(tqdm(train_loader)):
 
             seq, attn_masks, token_type_ids, labels = \
                 seq.to(device), attn_masks.to(device), token_type_ids.to(device), labels.to(device)
-    
+            import pdb; pdb.set_trace()
+
             with autocast():
                 logits = net(seq, attn_masks, token_type_ids)
 
@@ -407,6 +410,15 @@ def train_main(args):
     train_loader = DataLoader(train_set, batch_size=bs, num_workers=2)
     val_loader = DataLoader(val_set, batch_size=bs, num_workers=2) if val_set else None
 
+    train_generation_data = None
+    with open(TRAIN_GENERATION_DATA_NAME) as f:
+        generation_data_raw = json.loads(f.read())
+        train_generation_data = {
+            gen_data['question']: gen_data
+            for gen_data in generation_data_raw
+        }
+    import pdb; pdb.set_trace()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = SentencePairClassifier(bert_model=bert_model, tokenizer=tokenizer, freeze_bert=freeze_bert)
     net.to(device)
@@ -419,7 +431,7 @@ def train_main(args):
     t_total = (len(train_loader) // iters_to_accumulate) * epochs  # Necessary to take into account Gradient accumulation
     lr_scheduler = get_linear_schedule_with_warmup(optimizer=opti, num_warmup_steps=num_warmup_steps, num_training_steps=t_total)
 
-    train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.output_dir)
+    train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, args.output_dir, train_generation_data)
 
 
 def evaluation_main(args):
