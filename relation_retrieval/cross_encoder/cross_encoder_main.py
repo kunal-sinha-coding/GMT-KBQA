@@ -329,95 +329,56 @@ def evaluation(net, device, dataloader, loss_type, with_labels=True, result_file
     w.write("recall score on test data: {}\n".format(recall))
     w.close()
     
-def predict(
-    net,
-    device,
-    dataloader,
-    dataset,
-    with_labels=True,
-    relation_file="output/relation_scores.json",
-    logits_file="output/logits.pt",
-    metric_file="output/metric.txt",
-    loss_type="CE"
-):
+def predict(net, device, dataloader, dataset, with_labels=True, relation_file="output/relation.tsv", logits_file="output/logits.pt", metric_file="output/metric.txt", loss_type="BCE"):
     """
-    Predict on dataset.
-
-    relation_file: saves relations with scores for each question
-    logits_file: saves raw logits
-    metric_file: saves Accuracy, Precision, Recall, F1, Kappa
+    Predict on data set. 
+    relation_file: for each question, write classified relations
+    logits_file: write prediction logits
+    metric_file: Accuracy, P, R, F1, Kappa
+    loss_type: "BCE" | "CE"
     """
-
     net.eval()
-
-    question_relations_map = defaultdict(list)
-    logits_collect = []
+    question_relations_map = defaultdict(list) 
+    logits_collect = torch.randn(0).to(device)
     preds = []
     golden_truth = []
 
     with torch.no_grad():
-        for seq, attn_masks, token_type_ids, labels, indexes in tqdm(dataloader):
-
-            seq = seq.to(device)
-            attn_masks = attn_masks.to(device)
-            token_type_ids = token_type_ids.to(device)
-
-            logits = net(seq, attn_masks, token_type_ids)
-            logits_collect.append(logits.cpu())
-
-            if loss_type == "BCE":
-                probs = torch.sigmoid(logits.squeeze(-1))
-                scores = probs.cpu().numpy()
-                pred = (scores > 0.5).astype(int)
-
-            elif loss_type == "CE":
-                probs = torch.softmax(logits, dim=1)[:, 1]
-                scores = probs.cpu().numpy()
-                pred = (scores > 0.5).astype(int)
-
-            preds += pred.tolist()
-            golden_truth += labels.tolist()
-
-            indexes = indexes.tolist()
-
-            for i, idx in enumerate(indexes):
-                item = dataset.get_original_item(idx)
-
-                question_relations_map[item["question"]].append({
-                    "relation": item["relation"],
-                    "score": float(scores[i]),
-                    "label": int(labels[i])
-                })
-
-    # concatenate logits and save
-    logits_collect = torch.cat(logits_collect, dim=0)
+        if with_labels:
+            for seq, attn_masks, token_type_ids, labels, indexes in tqdm(dataloader):
+                seq, attn_masks, token_type_ids = seq.to(device), attn_masks.to(device), token_type_ids.to(device)
+                logits = net(seq, attn_masks, token_type_ids)
+                logits_collect = torch.cat((logits_collect, logits), 0)
+                if loss_type == "BCE":
+                    probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
+                    pred = np.where(probs > 0.5, 1, 0)
+                elif loss_type == "CE":
+                    pred = np.argmax(logits.detach().cpu().numpy(), axis=1)
+                
+                preds += pred.tolist()
+                golden_truth += labels.tolist()
+                indexes = indexes.tolist()
+                true_indexes = [indexes[i] for i in range(0, len(indexes)) if pred[i] == 1]
+                orig_items = [dataset.get_original_item(index) for index in true_indexes]
+                    
+                for item in orig_items:
+                    question_relations_map[str(item["question"])].append(item["relation"])
     torch.save(logits_collect, logits_file)
 
-    # compute metrics
     accuracy = accuracy_score(golden_truth, preds)
     kappa = cohen_kappa_score(golden_truth, preds)
     f1 = f1_score(golden_truth, preds, pos_label=1, average='binary')
     precision = precision_score(golden_truth, preds, pos_label=1, average='binary')
     recall = recall_score(golden_truth, preds, pos_label=1, average='binary')
-
     with open(metric_file, 'w') as f:
-        f.write(f"Accuracy: {accuracy}\n")
-        f.write(f"Kappa: {kappa}\n")
-        f.write(f"F1: {f1}\n")
-        f.write(f"Precision: {precision}\n")
-        f.write(f"Recall: {recall}\n")
-
-    # sort relations by score (descending)
-    for question in question_relations_map:
-        question_relations_map[question] = sorted(
-            question_relations_map[question],
-            key=lambda x: x["score"],
-            reverse=True
-        )
-
-    # save relation scores
+        f.write("Accuracy on test data: {}\n".format(accuracy))
+        f.write("Kappa on test data: {}\n".format(kappa))
+        f.write("F1 score on test data: {}\n".format(f1))
+        f.write("Precision score on test data: {}\n".format(precision))
+        f.write("Recall score on test data: {}\n".format(recall))
+    
     with open(relation_file, 'w') as f:
-        json.dump(question_relations_map, f, indent=4)
+        json.dump(question_relations_map, fp=f, indent=4)
 
 
 def train_main(args):
