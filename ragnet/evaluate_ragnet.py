@@ -142,9 +142,9 @@ async def evaluate_all(data, database_info, llm_model, llm_tokenizer, device, tr
             llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, train_data, train_embeddings
         )
         all_results.append(result)
-    tp, fp, fn, hits1, hits, count, cost = map(list, zip(*all_results))
+    recall, precision, f1, cost = [sum(result, []) for result in *zip(all_results)]
     print(f"Total LLM cost: {sum(cost)}")
-    return sum(tp), sum(fp), sum(fn), sum(hits1), sum(hits), sum(count)
+    return np.mean(recall), np.mean(precision), np.mean(f1)
 
 
 class StopOnMultipleWords(StoppingCriteria):
@@ -182,10 +182,10 @@ async def get_prompts(examples_batch, train_data, train_embeddings, top_k):
 async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stopping_criteria, database_info, train_data, train_embeddings, top_k=5):
 
     prompts_batch = await get_prompts(examples_batch, train_data, train_embeddings, top_k)
-    all_reasoning, all_normed_expr, all_sparql_queries, all_predictions, total_cost = await get_predictions_gpt(prompts_batch, examples_batch, database_info)
-    failed_indices = [ idx for idx in range(len(examples_batch)) if len(all_predictions[idx]) == 0 ]
-    max_retries = 2
-    retry = 1
+    all_reasoning, all_normed_expr, all_sparql_queries, all_predictions, all_costs = await get_predictions_gpt(prompts_batch, examples_batch, database_info)
+    #failed_indices = [ idx for idx in range(len(examples_batch)) if len(all_predictions[idx]) == 0 ]
+    #max_retries = 2
+    #retry = 1
     #while len(failed_indices) > 0 and retry < max_retries:
     #    prompts_batch_failed = []
     #    for idx in failed_indices:
@@ -224,20 +224,18 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
     #get_predictions(llm_model, llm_tokenizer, device, stopping_criteria, prompts, question_id, database_info)
 
     # Compute evaluation metrics and save
-    total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = 0, 0, 0, 0, 0, 0
+    all_recall, all_precision, all_f1 = [], [], []
     for i, example in enumerate(examples_batch):
         question, question_id, entities, relations, answer = example["question"], example["ID"], example["entities"], example["relations"], example["answer"]
         gt_normed_expr, gt_sparql_query = example["normed_sexpr"], example["sparql"]
-        tp, fp, fn, hits1, hits = get_retrieval_counts(all_predictions[i], answer)
+        tp, fp, fn = get_retrieval_counts(all_predictions[i], answer)
+        recall, precision, f1 = calculate_retrieval_metrics(tp, fp, fn)
+        all_recall.append(recall)
+        all_precision.append(precision)
+        all_f1.append(f1)
     #    if fp > 10000:
     #        print("REMOVING OUTLIER")
     #        continue
-        total_tp += tp
-        total_fp += fp
-        total_fn += fn
-        total_hits1 += int(hits1)
-        total_hits += int(total_hits)
-        total_count += 1
         with OUTPUT_FILE.open("a") as output_file:
             output = f"\n\nQuestion ID: {question_id}"
             output += f"\nPrompts batch: {prompts_batch[i]}"
@@ -247,11 +245,11 @@ async def evaluate_single(llm_model, llm_tokenizer, device, examples_batch, stop
             output += f"\nGroundtruth normed expr: {gt_normed_expr}"
             output += f"\nGroundtruth query: {gt_sparql_query}"
             output += f"\nAnswer: {answer}"
-            output += f"\nTP: {total_tp}, FP: {total_fp}, FN: {total_fn}"
-            output += f"\nHits@1: {hits1}, Hits: {hits}"
+            output += f"\nTP: {tp}, FP: {fp}, FN: {fn}"
+            output += f"\nRecall: {recall}, Precision: {precision}, F1: {f1}"
             output_file.write(output)
             print(output)
-    return total_tp, total_fp, total_fn, total_hits1, total_hits, total_count, total_cost
+    return all_recall, all_precision, all_f1
 
 
 def compute_cosine_similarity(v, M):
@@ -305,9 +303,8 @@ async def get_predictions_gpt(prompts, examples_batch, database_info):
     all_normed_expr = [None for _ in prompts]
     all_sparql_queries = [None for _ in prompts]
     all_predictions = [[] for _ in prompts]
-
-    total_input_tokens = 0
-    total_output_tokens = 0
+    all_costs = [0 for _ in prompts]
+    pricing = LLM_MODEL_PRICING[LLM_MODEL_NAME]
 
     tasks = [get_response_gpt(prompt, system_prompt_lambda_dcs_examples_constrained) for prompt in prompts]
     results = await asyncio.gather(*tasks)
@@ -321,8 +318,11 @@ async def get_predictions_gpt(prompts, examples_batch, database_info):
             continue
         all_normed_expr[i] = normed_expr
 
-        total_input_tokens += usage.prompt_tokens
-        total_output_tokens += usage.completion_tokens
+        cost = (
+            usage.prompt_tokens * pricing["input"]
+            + usage.completion_tokens * pricing["output"]
+        )
+        all_costs.append(cost)
 
         if not normed_expr:
             print(f"No normed expression from decoded: {decoded}")
@@ -356,14 +356,9 @@ async def get_predictions_gpt(prompts, examples_batch, database_info):
             continue
         all_predictions[i] = predictions
 
-    pricing = LLM_MODEL_PRICING[LLM_MODEL_NAME]
-    total_cost = (
-        total_input_tokens * pricing["input"]
-        + total_output_tokens * pricing["output"]
-    )
-    print(f"LLM cost: {total_cost}")
+    print(f"LLM cost: {sum(all_costs)}")
 
-    return all_reasoning, all_normed_expr, all_sparql_queries, all_predictions, total_cost
+    return all_reasoning, all_normed_expr, all_sparql_queries, all_predictions, all_costs
 
     
 
@@ -503,28 +498,13 @@ def get_retrieval_counts(predictions, groundtruth):
     tp = len(predictions.intersection(groundtruth))
     fp = len(predictions) - tp
     fn = len(groundtruth) - tp
-    hits1, hits = False, False
-    for i, pred in enumerate(predictions):
-        if pred not in groundtruth:
-            continue
-        hits = True
-        if i == 0:
-            hits1 = True
-    return tp, fp, fn, hits1, hits
+    return tp, fp, fn
 
-def calculate_retrieval_metrics(tp, fp, fn, hits1, hits, count):
+def calculate_retrieval_metrics(tp, fp, fn):
     recall = tp / (tp + fn)
     precision = tp / (tp + fp)
     f1 = (2 * precision * recall) / (precision + recall)
-
-    return {
-        "recall": recall,
-        "precision": precision,
-        "f1": f1,
-        "hits@1": hits1 / count,
-        "hits": hits / count
-    }
-
+    return recall, precision, f1
 
 #def query_database_with_sparql(sparql_query):
 #    url = "https://query.wikidata.org/sparql"
@@ -643,10 +623,14 @@ async def main():
         output_file.write("\n\n~~ NEW RUN STARTING ~~\n\n")
     train_data, train_embeddings = await get_train_embeddings()
     with torch.no_grad():
-        total_tp, total_fp, total_fn, total_hits1, total_hits, total_count = await evaluate_all(
+        recall, precision, f1 = await evaluate_all(
             data, database_info, llm_model, llm_tokenizer, device, train_data, train_embeddings
         )
-    metrics = calculate_retrieval_metrics(total_tp, total_fp, total_fn, total_hits1, total_hits, total_count)
+    metrics = {
+        "recall": recall,
+        "precision": precision,
+        "f1": f1
+    }
     print(metrics)
     with open(RESULTS_FILE, "a") as results_file:
         results_file.write(f"\n{json.dumps(metrics)}")

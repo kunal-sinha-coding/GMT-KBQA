@@ -15,6 +15,8 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
 from torch.optim import AdamW
 from sklearn.metrics import cohen_kappa_score, accuracy_score, f1_score, precision_score, recall_score
+from torch.utils.data import Sampler
+import random
 
 TRAIN_GENERATION_DATA_NAME = "data/WebQSP/generation/merged/WebQSP_train.json"
 
@@ -46,7 +48,7 @@ def data_process(args):
     if args.do_train or args.do_eval:
         if args.dataset_type == 'WebQSP':
             train_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.train.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
-            dev_df = None
+            dev_df = pd.read_csv('data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.train.tsv', delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int}) #None
             test_df = None
         else:
             train_df = pd.read_csv('data/CWQ/relation_retrieval/cross_encoder/mask_mention_1epoch_question_relation/CWQ.train.tsv', delimiter='\t', dtype={"id":int, "question":str, "relation":str, 'label':int})
@@ -95,13 +97,19 @@ def evaluate(net, device, criterion, dataloader, loss_type):
                 seq.to(device), attn_masks.to(device), token_type_ids.to(device), labels.to(device)
             logits = net(seq, attn_masks, token_type_ids)
             # mean_loss += criterion(logits.squeeze(-1), labels.float()).item() # BCELoss
-            mean_loss += criterion(logits, labels).item()
+            # mean_loss += criterion(logits, labels).item() # CrossEntropyLoss
+            current_loss = listwise_softmax_loss(logits, labels)
+            if current_loss is not None:
+                mean_loss += current_loss.item()
             count += 1
             if loss_type == "BCE":
                 probs = get_probs_from_logits(logits.squeeze(-1)).squeeze(-1)
                 pred = np.where(probs > 0.5, 1, 0)
             elif loss_type == "CE":
                 pred = np.argmax(logits.detach().cpu().numpy(), axis=1)
+            elif loss_type == "listwise":
+                scores = logits.detach().cpu().numpy()
+                pred = (scores > 0).astype(int)
             preds += pred.tolist()
             golden_truth += labels.tolist()
     accuracy = accuracy_score(golden_truth, preds)
@@ -158,6 +166,28 @@ class CustomDataset(Dataset):
         else:
             return token_ids, attn_masks, token_type_ids, index
 
+class QuestionBatchSampler(Sampler):
+
+    def __init__(self, dataframe, shuffle=True):
+        self.shuffle = shuffle
+        self.q_to_indices = defaultdict(list)
+
+        for idx in range(len(dataframe)):
+            q = dataframe.loc[idx, "question"]
+            self.q_to_indices[q].append(idx)
+
+        self.questions = list(self.q_to_indices.keys())
+
+    def __iter__(self):
+
+        if self.shuffle:
+            random.shuffle(self.questions)
+
+        for q in self.questions:
+            yield self.q_to_indices[q]
+
+    def __len__(self):
+        return len(self.questions)
 
 class SentencePairClassifier(nn.Module):
     def __init__(self, bert_model="bert-base-uncased", tokenizer=None, freeze_bert=False):
@@ -179,8 +209,8 @@ class SentencePairClassifier(nn.Module):
                 p.requires_grad = False
 
         # Classification layer
-        # self.cls_layer = nn.Linear(hidden_size, 1) # BCELoss
-        self.cls_layer = nn.Linear(hidden_size, 2) # CrossEntropyLoss
+        self.cls_layer = nn.Linear(hidden_size, 1) # BCELoss or Listwise loss
+        # self.cls_layer = nn.Linear(hidden_size, 2) # CrossEntropyLoss
 
         self.dropout = nn.Dropout(p=0.1)
     
@@ -194,10 +224,26 @@ class SentencePairClassifier(nn.Module):
         '''
 
         pooler_output = self.bert_layer(input_ids, attn_masks, token_type_ids).pooler_output
-        logits = self.cls_layer(self.dropout(pooler_output))
+        
+        # logits = self.cls_layer(self.dropout(pooler_output)) # Default losses
+        # return logits
 
-        return logits
+        score = self.cls_layer(self.dropout(pooler_output)).squeeze(-1) # Listwise loss
+        return score
 
+def listwise_softmax_loss(scores, labels):
+
+    log_probs = torch.log_softmax(scores, dim=0)
+
+    pos_mask = labels == 1
+    if pos_mask.sum() == 0:
+        return None
+
+    target_prob = pos_mask.float() / pos_mask.sum()
+
+    loss = -(target_prob * log_probs).sum()
+
+    return loss
 
 def train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_loader, epochs, iters_to_accumulate, device, log_path, output_dir, train_generation_data):
 
@@ -222,13 +268,18 @@ def train_bert(args, net, criterion, opti, lr, lr_scheduler, train_loader, val_l
 
             seq, attn_masks, token_type_ids, labels = \
                 seq.to(device), attn_masks.to(device), token_type_ids.to(device), labels.to(device)
-            import pdb; pdb.set_trace()
 
             with autocast():
-                logits = net(seq, attn_masks, token_type_ids)
-
+                # CrossEntropy loss
+                # logits = net(seq, attn_masks, token_type_ids)
                 # loss = criterion(logits.squeeze(-1), labels.float())
-                loss = criterion(logits, labels) # CrossEntropyLoss
+                # loss = criterion(logits, labels)
+
+                # Listwise loss
+                scores = net(seq, attn_masks, token_type_ids)
+                loss = listwise_softmax_loss(scores, labels)
+                if loss is None:
+                    continue
                 loss = loss / iters_to_accumulate  # Normalize the loss because it is averaged
 
             scaler.scale(loss).backward()
@@ -406,9 +457,16 @@ def train_main(args):
     if dev_df is not None:
         print("Reading validation data...")
         val_set = CustomDataset(dev_df, maxlen, tokenizer=tokenizer, bert_model=bert_model)
+    
     # Creating instances of training and validation dataloaders
-    train_loader = DataLoader(train_set, batch_size=bs, num_workers=2)
-    val_loader = DataLoader(val_set, batch_size=bs, num_workers=2) if val_set else None
+    # Cross entropy loss
+    # train_loader = DataLoader(train_set, batch_size=bs, num_workers=2)
+    # val_loader = DataLoader(val_set, batch_size=bs, num_workers=2) if val_set else None
+    # Listwise loss
+    train_sampler = QuestionBatchSampler(train_df, shuffle=True)
+    train_loader = DataLoader(train_set, batch_sampler=train_sampler, num_workers=2)
+    val_sampler = QuestionBatchSampler(dev_df, shuffle=True)
+    val_loader = DataLoader(val_set, batch_sampler=val_sampler, num_workers=2)
 
     train_generation_data = None
     with open(TRAIN_GENERATION_DATA_NAME) as f:
@@ -417,7 +475,6 @@ def train_main(args):
             gen_data['question']: gen_data
             for gen_data in generation_data_raw
         }
-    import pdb; pdb.set_trace()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     net = SentencePairClassifier(bert_model=bert_model, tokenizer=tokenizer, freeze_bert=freeze_bert)
