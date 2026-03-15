@@ -22,6 +22,7 @@ TRAIN_CROSS = "data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epoch
 
 TEST_GEN = "data/WebQSP/generation/merged/WebQSP_test.json"
 TEST_REL = "data/WebQSP/relation_retrieval/candidate_relations/WebQSP_test_cand_rels_sorted.json"
+TEST_CROSS = "data/WebQSP/relation_retrieval/cross_encoder/rich_relation_3epochs_question_relation/WebQSP.test.tsv"
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -33,8 +34,6 @@ NEGATIVE_RATIO = 8
 HARD_NEGATIVE_POOL = 100
 
 MAX_LEN = 128
-
-THRESHOLD = 0.5
 
 # ------------------------------------------------
 # Gold relation extraction
@@ -73,17 +72,17 @@ class ListwiseRelationDataset(Dataset):
             gold = set(extract_relations(expr))
             candidates = rel_data[qid]
 
-            positives = [r for r in candidates if r in gold]
+            positives = [r for r, s in candidates if r in gold]
 
             if len(positives) == 0:
                 continue
 
             pos = positives[0]
 
-            hard_negs = [r for r in candidates[:HARD_NEGATIVE_POOL] if r not in gold]
+            hard_negs = [r for r, s in candidates[:HARD_NEGATIVE_POOL] if r not in gold]
 
             if len(hard_negs) < NEGATIVE_RATIO:
-                hard_negs = [r for r in candidates if r not in gold]
+                hard_negs = [r for r, s in candidates if r not in gold]
 
             negatives = random.sample(
                 hard_negs,
@@ -174,13 +173,14 @@ def load_data(gen_file, rel_file, cross_file):
         rel_data = json.load(f)
 
     cross_data = {}
-    cross_data_raw = pd.read_csv(cross_file, delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
-    for (idx, question, relation, label) in cross_data_raw.to_numpy():
-        if question not in cross_data:
-            cross_data[question] = []
-        if label == 0:
-            continue
-        cross_data[question].append(relation)
+    if cross_file:
+        cross_data_raw = pd.read_csv(cross_file, delimiter='\t',dtype={"id":int, "question":str, "relation":str, 'label':int})
+        for (idx, question, relation, label) in cross_data_raw.to_numpy():
+            if question not in cross_data:
+                cross_data[question] = []
+            if label == 0:
+                continue
+            cross_data[question].append(relation)
 
     return gen_data, rel_data, cross_data
 
@@ -190,7 +190,7 @@ def load_data(gen_file, rel_file, cross_file):
 
 def train_model():
 
-    gen_data, rel_data, cross_data = load_data(TRAIN_GEN, TRAIN_REL, TRAIN_CROSS)
+    gen_data, rel_data, cross_data = load_data(TEST_GEN, TEST_REL, TEST_CROSS)
 
     dataset = ListwiseRelationDataset(gen_data, rel_data)
 
@@ -285,7 +285,7 @@ def predict_relations(question, candidates, model, tokenizer):
 # Metrics
 # ------------------------------------------------
 
-def compute_metrics(predicted, gold):
+def compute_counts(predicted, gold):
 
     predicted = set(predicted)
     gold = set(gold)
@@ -294,6 +294,9 @@ def compute_metrics(predicted, gold):
     fp = len(predicted - gold)
     fn = len(gold - predicted)
 
+    return tp, fp, fn
+
+def compute_metrics(tp, fp, fn):
     precision = tp/(tp+fp) if tp+fp>0 else 0
     recall = tp/(tp+fn) if tp+fn>0 else 0
 
@@ -307,24 +310,26 @@ def compute_metrics(predicted, gold):
 
 def evaluate(model, tokenizer):
 
-    gen_data, rel_data, cross_data = load_data(TRAIN_GEN, TRAIN_REL, TRAIN_CROSS)
-
-    precisions = []
-    recalls = []
-    f1s = []
+    gen_data, rel_data, cross_data = load_data(TEST_GEN, TEST_REL, TEST_CROSS)
 
     model.eval()
 
-    for qid in tqdm(gen_data):
+    for threshold in [0.15]:
+        
+        total_tp = 0
+        total_fp = 0
+        total_fn = 0
 
-        question = gen_data[qid]["question"]
+        for qid in tqdm(gen_data):
 
-        expr = gen_data[qid]["normed_sexpr"]
+            question = gen_data[qid]["question"]
 
-        gold_extracted = extract_relations(expr)
-        gold_labeled = cross_data[question]
+            expr = gen_data[qid]["normed_sexpr"]
 
-        candidates = rel_data[qid]
+            gold_extracted = extract_relations(expr)
+            gold_labeled = cross_data[question]
+
+            candidates = rel_data[qid]
 
         #predicted = predict_relations(
         #    question,
@@ -332,24 +337,31 @@ def evaluate(model, tokenizer):
         #    model,
         #    tokenizer
         #)
-        predicted = candidates[:len(gold_extracted)]#[ cand for cand in candidates if cand in gold ]
+            scores = torch.softmax(torch.tensor([score for _, score in candidates]), dim=-1)
+            predicted = [ rel for i, (rel, _) in enumerate(candidates) if scores[i] >= threshold ]
+            #predicted = [ rel for rel, _ in candidates[:len(gold_extracted)] ]
+
+            #if set(predicted) != set(gold_extracted):
+                #print(f"Candidates: {candidates[:10]}")
+                #print(f"Predicted: {predicted}")
+                #print(f"Groundtruth: {gold_extracted}")
+                #predicted = predicted[1:len(gold_extracted)+1]
+
+            tp, fp, fn = compute_counts(predicted, gold_extracted)
+
+            total_tp += tp
+            total_fp += fp
+            total_fn += fn
+
+        print(f"\nEvaluation Results for threshold={threshold}")
     
-        if set(predicted) != set(gold_extracted):
-            predicted = candidates[1:len(gold_extracted)+1]
+        precision, recall, f1 = compute_metrics(total_tp, total_fp, total_fn)
 
-        p,r,f = compute_metrics(gold_labeled, gold_extracted)
-
-        precisions.append(p)
-        recalls.append(r)
-        f1s.append(f)
-
-    print("\nEvaluation Results")
-
-    print({
-        "precision": np.mean(precisions),
-        "recall": np.mean(recalls),
-        "f1": np.mean(f1s)
-    })
+        print({
+            "precision": precision,
+            "recall": recall,
+            "f1": f1
+        })
 
 # ------------------------------------------------
 # Main

@@ -22,12 +22,13 @@ if [ "$ACTION" = "train" ]; then
                             --do_train \
                             --max_len 34 \
                             --batch_size 128 \
-                            --epochs 3 \
+                            --epochs 100 \
                             --log_dir ${log_dir} \
                             --dataset_type WebQSP \
                             --model_save_path ${exp_prefix} \
                             --output_dir ${exp_prefix} \
                             --cache_dir bert-base-uncased \
+			    --loss_type listwise \
                            
 elif [ "$ACTION" = "eval" ]; then
     split=${3:-test}

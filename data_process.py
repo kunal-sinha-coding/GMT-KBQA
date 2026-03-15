@@ -211,7 +211,7 @@ def make_sorted_relation_dataset_from_logits(dataset, split):
         else:
             # cand_rel_list = list(cand_rel_map.keys())
             # cand_rel_list.sort(key=lambda x:float(cand_rel_map[x]),reverse=True)
-            final_candRel_map[qid]=[x[0] for x in cand_rel_list]
+            final_candRel_map[qid]=[(x[0], x[1]) for x in cand_rel_list]
 
     sorted_cand_rel_name = os.path.join(output_dir,f'{dataset}_{split}_cand_rels_sorted.json')
     dump_json(final_candRel_map,sorted_cand_rel_name,indent=4)   
